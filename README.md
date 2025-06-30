@@ -10,16 +10,57 @@ Um gráfico Renko interativo que se conecta à API da Binance via WebSocket para
 - **Configurável**: Tamanho de bloco ajustável em tempo real
 - **Estatísticas**: Contador de blocos verdes/vermelhos e direção
 - **Responsivo**: Adapta-se a diferentes tamanhos de tela
+- **Order Book Integration**: Análise de liquidez em tempo real
+- **Supabase Integration**: Persistência de dados
+
+## 🏗️ Estrutura do Projeto
+
+```
+renkoBTC/
+├── 📁 src/                    # Código fonte
+│   └── 📁 js/                 # Arquivos JavaScript
+│       ├── script.js          # Lógica principal do gráfico Renko
+│       ├── config.js          # Configurações do projeto
+│       └── utils.js           # Utilitários e funções auxiliares
+├── 📁 database/               # Scripts e migrações do banco
+│   └── 📁 migrations/         # Scripts SQL para Supabase
+│       ├── add_orderbook_fields.sql
+│       ├── alter_orderbook_to_float8.sql
+│       ├── alter_orderbook_to_float8_safe.sql
+│       ├── round_orderbook_decimals.sql
+│       └── verify_float8_conversion.sql
+├── 📁 docs/                   # Documentação do projeto
+│   ├── README.md              # Documentação principal
+│   ├── IMPLEMENTATION_SUMMARY.md
+│   ├── ORDER_BOOK_INTEGRATION.md
+│   ├── SUPABASE_INTEGRATION.md
+│   ├── SECURITY.md
+│   └── ...                   # Demais documentos
+├── 📁 scripts/                # Scripts de automação
+│   └── start.sh              # Script de inicialização
+├── index.html                 # Página principal
+├── package.json              # Dependências e configurações npm
+└── README.md                 # Este arquivo
+```
 
 ## 🚀 Como Usar
 
-1. **Abrir o arquivo `index.html` em um navegador moderno**
-   - Chrome, Firefox, Safari ou Edge (versões recentes)
-   - Certifique-se de que JavaScript está habilitado
+### Método 1: Servidor Local (Recomendado)
+```bash
+# Executar o script de inicialização
+./scripts/start.sh
 
-2. **Configurações Disponíveis:**
-   - **Tamanho do Bloco**: Define a variação de preço necessária para criar um novo bloco (padrão: $10)
-   - **Zoom**: Controla quantos blocos são visíveis na tela
+# Ou usar npm
+npm start
+```
+
+### Método 2: Abertura Direta
+1. Abrir o arquivo `index.html` em um navegador moderno
+2. Certificar-se de que JavaScript está habilitado
+
+### Configurações Disponíveis:
+- **Tamanho do Bloco**: Define a variação de preço necessária para criar um novo bloco (padrão: $10)
+- **Zoom**: Controla quantos blocos são visíveis na tela
 
 ## 📈 Como Funciona o Gráfico Renko
 
@@ -28,131 +69,48 @@ Um gráfico Renko interativo que se conecta à API da Binance via WebSocket para
 - **Bloco Vermelho**: Criado quando o preço desce $X em relação ao último bloco
 - **Sem Tempo**: Os blocos são criados apenas com base na variação de preço, não no tempo
 
-### Exemplo com Tamanho de Bloco = $10:
-```
-Preço inicial: $50,000
-Preço sobe para $50,010 → Cria 1 bloco verde
-Preço sobe para $50,025 → Cria mais 1 bloco verde  
-Preço desce para $50,005 → Cria 1 bloco vermelho
-```
+## 🗄️ Integração com Banco de Dados
 
-## 🎨 Interface
+O projeto inclui integração completa com Supabase para persistência de dados:
 
-### Cabeçalho:
-- **Título**: Nome da aplicação
-- **Preço Atual**: Preço BTC/USDT em tempo real
-- **Variação**: Percentual de mudança desde o último bloco
-- **Status**: Indicador de conexão com a Binance
+### Configuração Inicial
+1. Execute os scripts em `database/migrations/` na ordem numérica
+2. Configure as variáveis de ambiente no `src/js/config.js`
+3. Certifique-se de que as políticas RLS estejam configuradas
 
-### Painel de Configurações (canto superior direito):
-- **Tamanho Bloco**: Valor em USD para criar novos blocos
-- **Zoom**: Nível de aproximação do gráfico
+### Recursos de Banco:
+- Armazenamento de dados de preço em tempo real
+- Análise de order book e liquidez
+- Histórico de transações
+- Métricas de performance
 
-### Estatísticas (canto inferior esquerdo):
-- **Blocos Totais**: Quantidade total de blocos criados
-- **Blocos Verdes**: Quantidade de blocos de alta
-- **Blocos Vermelhos**: Quantidade de blocos de baixa
-- **Último Movimento**: Direção do último bloco (ALTA/BAIXA)
+## 📚 Documentação
 
-## 🔧 Tecnologias Utilizadas
+Consulte a pasta `docs/` para documentação detalhada:
 
-- **JavaScript ES6+**: Modules, Arrow Functions, Classes
-- **WebSocket**: Conexão em tempo real com Binance
-- **Lightweight Charts**: Biblioteca para gráficos financeiros
-- **CSS3**: Styling moderno com dark mode
-- **HTML5**: Estrutura semântica
+- **[Implementação](docs/IMPLEMENTATION_SUMMARY.md)**: Resumo da implementação
+- **[Order Book](docs/ORDER_BOOK_INTEGRATION.md)**: Integração do order book
+- **[Supabase](docs/SUPABASE_INTEGRATION.md)**: Configuração do banco
+- **[Segurança](docs/SECURITY.md)**: Considerações de segurança
 
-## 📡 API da Binance
+## 🛠️ Desenvolvimento
 
-A aplicação se conecta ao WebSocket público da Binance:
-```
-wss://stream.binance.com:9443/ws/btcusdt@trade
+### Requisitos
+- Node.js >= 14.0.0
+- Navegador moderno com suporte a WebSocket
+- Conta no Supabase (opcional)
+
+### Scripts Disponíveis
+```bash
+npm start    # Inicia servidor local
+npm serve    # Alias para start
+npm dev      # Modo desenvolvimento
 ```
 
-### Dados Recebidos:
-- **Símbolo**: BTCUSDT
-- **Preço**: Preço da última negociação
-- **Quantidade**: Volume da negociação
-- **Timestamp**: Momento da negociação
+## 📝 Licença
 
-## 🎯 Funcionalidades Avançadas
+MIT License - veja detalhes na documentação.
 
-### Reconexão Automática:
-- Se a conexão WebSocket cair, tenta reconectar automaticamente após 3 segundos
+## 🤝 Contribuição
 
-### Atualização em Tempo Real:
-- Preço atual atualiza a cada trade
-- Blocos Renko são criados instantaneamente quando atingem o threshold
-- Linha de preço atual mostra o valor mais recente
-
-### Responsividade:
-- Gráfico redimensiona automaticamente
-- Interface adaptável a diferentes resoluções
-
-## 🛠️ Personalização
-
-### Alterar Par de Trading:
-No arquivo `script.js`, linha 89, altere:
-```javascript
-const wsUrl = 'wss://stream.binance.com:9443/ws/btcusdt@trade';
-```
-
-Para outros pares, por exemplo:
-```javascript
-const wsUrl = 'wss://stream.binance.com:9443/ws/ethusdt@trade'; // Ethereum
-```
-
-### Alterar Cores:
-No arquivo `script.js`, nas opções do gráfico:
-```javascript
-upColor: '#0ecb81',      // Verde para alta
-downColor: '#f6465d',    // Vermelho para baixa
-```
-
-### Alterar Tamanho Padrão do Bloco:
-No arquivo `script.js`, linha 15:
-```javascript
-this.blockSize = 10; // Altere para o valor desejado
-```
-
-## 🔍 Debug e Monitoramento
-
-O console do navegador (F12) exibe:
-- Status de conexão WebSocket
-- Dados de trade recebidos
-- Criação de novos blocos Renko
-- Erros de conexão
-
-## ⚠️ Requisitos
-
-- **Navegador Moderno**: Suporte a ES6 Modules
-- **Conexão com Internet**: Para acessar API da Binance e CDN
-- **JavaScript Habilitado**: Necessário para funcionamento
-
-## 📚 Estrutura do Projeto
-
-```
-BotIABitcoin/
-├── index.html          # Interface principal
-├── script.js           # Lógica da aplicação
-└── README.md          # Documentação
-```
-
-## 🎓 Conceitos Aprendidos
-
-- **WebSocket em JavaScript**: Conexão bidirecional em tempo real
-- **ES6 Modules**: Importação de bibliotecas externas
-- **Classes JavaScript**: Organização orientada a objetos
-- **Arrow Functions**: Sintaxe moderna de funções
-- **API de Gráficos**: Integração com lightweight-charts
-- **Algoritmo Renko**: Lógica de blocos baseados em preço
-
-## 🔗 Links Úteis
-
-- [Binance WebSocket API](https://binance-docs.github.io/apidocs/spot/en/#websocket-market-streams)
-- [Lightweight Charts Documentation](https://tradingview.github.io/lightweight-charts/)
-- [Gráficos Renko - Conceito](https://www.investopedia.com/terms/r/renkochart.asp)
-
----
-
-**Desenvolvido com ❤️ para aprendizado de trading em tempo real**
+Contribuições são bem-vindas! Por favor, consulte a documentação em `docs/` antes de contribuir.

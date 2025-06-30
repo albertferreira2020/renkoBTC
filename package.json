@@ -2,12 +2,14 @@
   "name": "renko-btc-chart",
   "version": "1.0.0",
   "description": "Gráfico Renko em tempo real do BTC/USDT conectado à API da Binance",
-  "main": "script.js",
+  "main": "src/js/script.js",
   "type": "module",
   "scripts": {
-    "start": "python3 -m http.server 8080",
+    "start": "./scripts/start.sh",
     "serve": "python3 -m http.server 8080",
-    "dev": "python3 -m http.server 8080"
+    "dev": "python3 -m http.server 8080",
+    "setup": "echo 'Configure .env file based on .env.example'",
+    "docs": "echo 'Check docs/ folder for documentation'"
   },
   "keywords": [
     "bitcoin",
