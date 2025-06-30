@@ -11,6 +11,8 @@ class RenkoChart {
         this.renkoBlocks = [];
         this.lastBlockPrice = 0;
         this.lastBlockDirection = null; // 'up', 'down', ou null
+        this.currentVolume = 0;
+        this.accumulatedVolume = 0; // Volume acumulado para o bloco atual
         this.stats = {
             totalBlocks: 0,
             greenBlocks: 0,
@@ -43,8 +45,43 @@ class RenkoChart {
             this.supabaseKey = window.appConfig.getSupabaseKey();
             console.log('✅ Configuração do Supabase carregada');
 
+            // Testar estrutura da tabela
+            await this.checkTableStructure();
+
             // Carregar dados históricos após configuração
             await this.loadHistoricalData();
+        }
+    }
+
+    async checkTableStructure() {
+        try {
+            if (!this.supabaseUrl || !this.supabaseKey) {
+                return;
+            }
+
+            console.log('🔍 Verificando estrutura da tabela botbinance...');
+
+            // Fazer uma consulta simples para verificar os campos disponíveis
+            const response = await fetch(`${this.supabaseUrl}/botbinance?limit=1`, {
+                method: 'GET',
+                headers: {
+                    'apikey': this.supabaseKey,
+                    'Authorization': `Bearer ${this.supabaseKey}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.length > 0) {
+                    console.log('📋 Campos disponíveis na tabela:', Object.keys(data[0]));
+                } else {
+                    console.log('📊 Tabela vazia, não é possível verificar estrutura');
+                }
+            }
+
+        } catch (error) {
+            console.warn('⚠️ Erro ao verificar estrutura da tabela:', error);
         }
     }
 
@@ -385,17 +422,27 @@ class RenkoChart {
 
     processTradeData(tradeData) {
         const price = parseFloat(tradeData.p);
-        console.log(`💹 Novo trade recebido: $${price.toFixed(2)}`);
+        const quantity = parseFloat(tradeData.q); // Volume da transação
+        const volume = price * quantity; // Volume em USDT
+
+        console.log(`💹 Novo trade recebido: $${price.toFixed(2)}, Qtd: ${quantity}, Volume: $${volume.toFixed(2)}`);
 
         this.currentPrice = price;
+        this.currentVolume = volume;
         this.updatePriceDisplay(price);
         this.updateCurrentPriceLine(price);
 
         // Processar bloco Renko
-        this.processRenkoBlock(price);
+        this.processRenkoBlock(price, volume);
+
+        // Atualizar estatísticas para mostrar volume acumulado
+        this.updateStats();
     }
 
-    processRenkoBlock(price) {
+    processRenkoBlock(price, volume = 0) {
+        // Acumular volume para o bloco atual
+        this.accumulatedVolume += volume;
+
         // Se é o primeiro preço e não temos dados históricos, definir como base e criar bloco inicial
         if (this.renkoBlocks.length === 0) {
             this.lastBlockPrice = Math.floor(price / this.blockSize) * this.blockSize;
@@ -407,10 +454,12 @@ class RenkoChart {
                 this.lastBlockPrice,
                 this.lastBlockPrice + this.blockSize,
                 true, // Começar com verde
-                currentTime
+                currentTime,
+                this.accumulatedVolume
             );
             this.lastBlockPrice += this.blockSize;
             this.lastBlockDirection = 'up';
+            this.accumulatedVolume = 0; // Reset volume após criar bloco
             this.updateChart();
             this.updateStats();
             return;
@@ -438,15 +487,17 @@ class RenkoChart {
             if (priceChange >= this.blockSize) {
                 // Continua subindo - criar bloco verde
                 console.log(`🟢 Continuando ALTA: $${this.lastBlockPrice.toFixed(2)} → $${(this.lastBlockPrice + this.blockSize).toFixed(2)}`);
-                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice + this.blockSize, true, currentTime);
+                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice + this.blockSize, true, currentTime, this.accumulatedVolume);
                 this.lastBlockPrice += this.blockSize;
+                this.accumulatedVolume = 0; // Reset volume após criar bloco
                 blocksAdded = true;
             } else if (priceChange <= -(this.blockSize * 2)) {
                 // Reversão para baixo - precisa quebrar 2 blocos para reverter
                 console.log(`🔴 REVERSÃO para BAIXA: $${this.lastBlockPrice.toFixed(2)} → $${(this.lastBlockPrice - this.blockSize).toFixed(2)}`);
-                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice - this.blockSize, false, currentTime);
+                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice - this.blockSize, false, currentTime, this.accumulatedVolume);
                 this.lastBlockPrice -= this.blockSize;
                 this.lastBlockDirection = 'down';
+                this.accumulatedVolume = 0; // Reset volume após criar bloco
                 blocksAdded = true;
             }
         } else if (this.lastBlockDirection === 'down') {
@@ -454,15 +505,17 @@ class RenkoChart {
             if (priceChange <= -this.blockSize) {
                 // Continua descendo - criar bloco vermelho
                 console.log(`🔴 Continuando BAIXA: $${this.lastBlockPrice.toFixed(2)} → $${(this.lastBlockPrice - this.blockSize).toFixed(2)}`);
-                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice - this.blockSize, false, currentTime);
+                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice - this.blockSize, false, currentTime, this.accumulatedVolume);
                 this.lastBlockPrice -= this.blockSize;
+                this.accumulatedVolume = 0; // Reset volume após criar bloco
                 blocksAdded = true;
             } else if (priceChange >= (this.blockSize * 2)) {
                 // Reversão para cima - precisa quebrar 2 blocos para reverter
                 console.log(`🟢 REVERSÃO para ALTA: $${this.lastBlockPrice.toFixed(2)} → $${(this.lastBlockPrice + this.blockSize).toFixed(2)}`);
-                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice + this.blockSize, true, currentTime);
+                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice + this.blockSize, true, currentTime, this.accumulatedVolume);
                 this.lastBlockPrice += this.blockSize;
                 this.lastBlockDirection = 'up';
+                this.accumulatedVolume = 0; // Reset volume após criar bloco
                 blocksAdded = true;
             }
         }
@@ -476,7 +529,7 @@ class RenkoChart {
         }
     }
 
-    createRenkoBlock(open, close, isGreen, time) {
+    createRenkoBlock(open, close, isGreen, time, volume = 0) {
         if (!open || !close || isNaN(open) || isNaN(close)) {
             console.warn('Dados inválidos para criar bloco Renko');
             return;
@@ -488,8 +541,11 @@ class RenkoChart {
             high: isGreen ? parseFloat(close.toFixed(2)) : parseFloat(open.toFixed(2)),
             low: isGreen ? parseFloat(open.toFixed(2)) : parseFloat(close.toFixed(2)),
             close: parseFloat(close.toFixed(2)),
+            volume: parseFloat(volume.toFixed(2)),
             isGreen: isGreen
         };
+
+        console.log(`📦 Criando bloco Renko: ${isGreen ? '🟢' : '🔴'} $${open.toFixed(2)} → $${close.toFixed(2)}, Volume: $${volume.toFixed(2)}`);
 
         this.renkoBlocks.push(block);
 
@@ -521,11 +577,14 @@ class RenkoChart {
                 return;
             }
 
-            const renkoData = {
+            // Primeiro tentar com todos os campos
+            let renkoData = {
                 created_at: new Date().toISOString(),
                 open: block.open,
                 close: block.close,
-                volume: 0 // Placeholder, pode ser ajustado se você tiver dados de volume
+                high: block.high,
+                low: block.low,
+                volume: block.volume || 0
             };
 
             console.log('💾 Salvando bloco Renko no banco de dados:', renkoData);
@@ -543,10 +602,41 @@ class RenkoChart {
 
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`Erro HTTP ${response.status}: ${errorText}`);
-            }
 
-            console.log('✅ Bloco Renko salvo no banco com sucesso');
+                // Se erro for sobre campos inexistentes, tentar sem high/low
+                if (errorText.includes('high') || errorText.includes('low')) {
+                    console.warn('⚠️ Campos high/low não existem, tentando sem eles...');
+
+                    renkoData = {
+                        created_at: new Date().toISOString(),
+                        open: block.open,
+                        close: block.close,
+                        volume: block.volume || 0
+                    };
+
+                    const fallbackResponse = await fetch(`${this.supabaseUrl}/botbinance`, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': this.supabaseKey,
+                            'Authorization': `Bearer ${this.supabaseKey}`,
+                            'Content-Type': 'application/json',
+                            'Prefer': 'return=minimal'
+                        },
+                        body: JSON.stringify(renkoData)
+                    });
+
+                    if (!fallbackResponse.ok) {
+                        const fallbackErrorText = await fallbackResponse.text();
+                        throw new Error(`Erro HTTP ${fallbackResponse.status}: ${fallbackErrorText}`);
+                    }
+
+                    console.log('✅ Bloco Renko salvo no banco (sem high/low)');
+                } else {
+                    throw new Error(`Erro HTTP ${response.status}: ${errorText}`);
+                }
+            } else {
+                console.log('✅ Bloco Renko salvo no banco com sucesso (com high/low)');
+            }
 
             // Atualizar UI para mostrar que foi salvo
             this.updateSaveStatus(true);
@@ -660,6 +750,15 @@ class RenkoChart {
         document.getElementById('redBlocks').textContent = this.stats.redBlocks;
         document.getElementById('lastDirection').textContent = this.stats.lastDirection || '-';
 
+        // Atualizar volume acumulado atual
+        const currentVolumeElement = document.getElementById('currentVolume');
+        if (currentVolumeElement) {
+            currentVolumeElement.textContent = `$${this.accumulatedVolume.toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            })}`;
+        }
+
         // Atualizar cor do último movimento
         const lastDirectionElement = document.getElementById('lastDirection');
         if (this.stats.lastDirection === 'ALTA') {
@@ -673,6 +772,7 @@ class RenkoChart {
         this.renkoBlocks = [];
         this.lastBlockPrice = 0;
         this.lastBlockDirection = null;
+        this.accumulatedVolume = 0; // Reset volume acumulado
         this.stats = {
             totalBlocks: 0,
             greenBlocks: 0,
