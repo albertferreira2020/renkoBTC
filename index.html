@@ -187,6 +187,15 @@
             color: #f6465d !important;
             font-size: 10px;
         }
+
+        .historical-status.success {
+            color: #0ecb81 !important;
+        }
+
+        .historical-status.error {
+            color: #f6465d !important;
+            font-size: 10px;
+        }
     </style>
 </head>
 <body>
@@ -237,6 +246,10 @@
                 <div class="stat-item">
                     <span class="stat-label">Status BD:</span>
                     <span class="stat-value" id="saveStatus">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Dados Históricos:</span>
+                    <span class="stat-value" id="historicalStatus">Carregando...</span>
                 </div>
             </div>
         </div>

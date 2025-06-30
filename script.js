@@ -42,6 +42,180 @@ class RenkoChart {
             this.supabaseUrl = window.appConfig.getSupabaseUrl();
             this.supabaseKey = window.appConfig.getSupabaseKey();
             console.log('✅ Configuração do Supabase carregada');
+
+            // Carregar dados históricos após configuração
+            await this.loadHistoricalData();
+        }
+    }
+
+    async loadHistoricalData() {
+        try {
+            if (!this.supabaseUrl || !this.supabaseKey) {
+                console.warn('Configuração do Supabase não disponível para carregar dados históricos');
+                this.updateHistoricalStatus('❌ Config ausente', false);
+                return;
+            }
+
+            console.log('📥 Carregando dados históricos do Supabase...');
+            this.updateHistoricalStatus('📥 Carregando...');
+
+            const response = await fetch(`${this.supabaseUrl}/botbinance?order=created_at.asc&limit=1000`, {
+                method: 'GET',
+                headers: {
+                    'apikey': this.supabaseKey,
+                    'Authorization': `Bearer ${this.supabaseKey}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Erro HTTP ${response.status}: ${errorText}`);
+            }
+
+            const historicalData = await response.json();
+            console.log(`📊 ${historicalData.length} registros históricos encontrados`);
+
+            if (historicalData.length > 0) {
+                this.populateChartWithHistoricalData(historicalData);
+                this.updateHistoricalStatus(`✅ ${historicalData.length} blocos`);
+            } else {
+                this.updateHistoricalStatus('📊 Nenhum dado');
+            }
+
+        } catch (error) {
+            console.error('❌ Erro ao carregar dados históricos:', error);
+            this.updateHistoricalStatus('❌ Erro carregamento', false);
+            // Continuar mesmo se houver erro ao carregar dados históricos
+        }
+    }
+
+    populateChartWithHistoricalData(historicalData) {
+        try {
+            console.log('🔄 Populando gráfico com dados históricos...');
+
+            // Converter dados do Supabase para formato do gráfico
+            const chartData = historicalData.map((record, index) => {
+                const timestamp = new Date(record.created_at).getTime() / 1000;
+                const isGreen = record.close > record.open;
+
+                return {
+                    time: Math.floor(timestamp) + index, // Evitar sobreposição de timestamps
+                    open: parseFloat(record.open),
+                    high: isGreen ? parseFloat(record.close) : parseFloat(record.open),
+                    low: isGreen ? parseFloat(record.open) : parseFloat(record.close),
+                    close: parseFloat(record.close),
+                    isGreen: isGreen
+                };
+            });
+
+            // Atualizar array de blocos Renko
+            this.renkoBlocks = chartData;
+
+            // Configurar estado baseado no último bloco histórico
+            if (chartData.length > 0) {
+                const lastBlock = chartData[chartData.length - 1];
+                this.lastBlockPrice = lastBlock.close;
+                this.lastBlockDirection = lastBlock.isGreen ? 'up' : 'down';
+
+                // Atualizar estatísticas
+                this.stats.totalBlocks = chartData.length;
+                this.stats.greenBlocks = chartData.filter(block => block.isGreen).length;
+                this.stats.redBlocks = chartData.filter(block => !block.isGreen).length;
+                this.stats.lastDirection = this.lastBlockDirection === 'up' ? 'ALTA' : 'BAIXA';
+            }
+
+            // Atualizar gráfico
+            this.updateChart();
+            this.updateStats();
+
+            console.log(`✅ Gráfico populado com ${chartData.length} blocos históricos`);
+            console.log(`🎯 Último preço: $${this.lastBlockPrice}, Direção: ${this.lastBlockDirection}`);
+
+            // Iniciar monitoramento periódico de novos dados
+            this.startPeriodicDataSync();
+
+        } catch (error) {
+            console.error('❌ Erro ao popular gráfico com dados históricos:', error);
+        }
+    }
+
+    startPeriodicDataSync() {
+        // Sincronizar dados a cada 30 segundos para pegar novos registros
+        setInterval(async () => {
+            await this.syncNewData();
+        }, 30000); // 30 segundos
+
+        console.log('🔄 Sincronização periódica iniciada (30s)');
+    }
+
+    async syncNewData() {
+        try {
+            if (!this.supabaseUrl || !this.supabaseKey || this.renkoBlocks.length === 0) {
+                return;
+            }
+
+            // Buscar apenas dados mais recentes que o último bloco local
+            const lastLocalBlock = this.renkoBlocks[this.renkoBlocks.length - 1];
+            const lastTimestamp = new Date(lastLocalBlock.time * 1000).toISOString();
+
+            const response = await fetch(`${this.supabaseUrl}/botbinance?created_at=gt.${lastTimestamp}&order=created_at.asc`, {
+                method: 'GET',
+                headers: {
+                    'apikey': this.supabaseKey,
+                    'Authorization': `Bearer ${this.supabaseKey}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                console.warn('Erro na sincronização de dados:', response.status);
+                return;
+            }
+
+            const newData = await response.json();
+
+            if (newData.length > 0) {
+                console.log(`📥 ${newData.length} novos registros encontrados na sincronização`);
+
+                // Adicionar novos dados sem duplicar
+                newData.forEach((record, index) => {
+                    const timestamp = new Date(record.created_at).getTime() / 1000;
+                    const isGreen = record.close > record.open;
+
+                    const newBlock = {
+                        time: Math.floor(timestamp) + this.renkoBlocks.length + index,
+                        open: parseFloat(record.open),
+                        high: isGreen ? parseFloat(record.close) : parseFloat(record.open),
+                        low: isGreen ? parseFloat(record.open) : parseFloat(record.close),
+                        close: parseFloat(record.close),
+                        isGreen: isGreen
+                    };
+
+                    this.renkoBlocks.push(newBlock);
+
+                    // Atualizar estatísticas
+                    this.stats.totalBlocks++;
+                    if (isGreen) {
+                        this.stats.greenBlocks++;
+                        this.stats.lastDirection = 'ALTA';
+                    } else {
+                        this.stats.redBlocks++;
+                        this.stats.lastDirection = 'BAIXA';
+                    }
+
+                    // Atualizar estado
+                    this.lastBlockPrice = newBlock.close;
+                    this.lastBlockDirection = isGreen ? 'up' : 'down';
+                });
+
+                // Atualizar gráfico
+                this.updateChart();
+                this.updateStats();
+            }
+
+        } catch (error) {
+            console.warn('Erro na sincronização periódica:', error);
         }
     }
 
@@ -222,7 +396,7 @@ class RenkoChart {
     }
 
     processRenkoBlock(price) {
-        // Se é o primeiro preço, definir como base e criar bloco inicial
+        // Se é o primeiro preço e não temos dados históricos, definir como base e criar bloco inicial
         if (this.renkoBlocks.length === 0) {
             this.lastBlockPrice = Math.floor(price / this.blockSize) * this.blockSize;
             console.log(`🎯 Preço base definido: $${this.lastBlockPrice.toFixed(2)} (Tamanho bloco: $${this.blockSize})`);
@@ -240,6 +414,14 @@ class RenkoChart {
             this.updateChart();
             this.updateStats();
             return;
+        }
+
+        // Se já temos dados históricos, usar o último preço do histórico como referência
+        if (this.lastBlockPrice === 0 && this.renkoBlocks.length > 0) {
+            const lastHistoricalBlock = this.renkoBlocks[this.renkoBlocks.length - 1];
+            this.lastBlockPrice = lastHistoricalBlock.close;
+            this.lastBlockDirection = lastHistoricalBlock.isGreen ? 'up' : 'down';
+            console.log(`🔄 Continuando do último bloco histórico: $${this.lastBlockPrice.toFixed(2)}, Direção: ${this.lastBlockDirection}`);
         }
 
         const currentTime = Date.now() / 1000;
@@ -391,6 +573,14 @@ class RenkoChart {
                 statusElement.innerHTML = '';
                 statusElement.className = 'save-status';
             }, 3000);
+        }
+    }
+
+    updateHistoricalStatus(status, isSuccess = true) {
+        const statusElement = document.getElementById('historicalStatus');
+        if (statusElement) {
+            statusElement.innerHTML = status;
+            statusElement.className = isSuccess ? 'historical-status success' : 'historical-status error';
         }
     }
 
