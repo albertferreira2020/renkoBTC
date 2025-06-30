@@ -160,7 +160,7 @@ class RenkoChart {
                     low: isGreen ? parseFloat(record.open) : parseFloat(record.close),
                     close: parseFloat(record.close),
                     volume: record.volume ? parseFloat(record.volume) : 0,
-                    reversal: record.reversal || null, // Incluir dados de reversão históricos
+                    reversal: record.reversal !== null && record.reversal !== undefined ? record.reversal : 0, // Garantir 0 quando não houver reversão
                     isGreen: isGreen
                 };
             });
@@ -186,7 +186,7 @@ class RenkoChart {
             this.updateStats();
 
             // Debug: verificar se há reversões nos dados históricos
-            const historicalReversals = this.renkoBlocks.filter(block => block.reversal !== null);
+            const historicalReversals = this.renkoBlocks.filter(block => block.reversal !== 0);
             console.log(`🔍 Reversões encontradas nos dados históricos: ${historicalReversals.length}`);
             if (historicalReversals.length > 0) {
                 console.log('📋 Primeiras reversões:', historicalReversals.slice(0, 3));
@@ -524,7 +524,7 @@ class RenkoChart {
                 true, // Começar com verde
                 currentTime,
                 this.accumulatedVolume,
-                null // Primeiro bloco não é reversão
+                0 // Primeiro bloco não é reversão
             );
             this.lastBlockPrice += this.blockSize;
             this.lastBlockDirection = 'up';
@@ -556,7 +556,7 @@ class RenkoChart {
             if (priceChange >= this.blockSize) {
                 // Continua subindo - criar bloco verde (continuação)
                 console.log(`🟢 Continuando ALTA: $${this.lastBlockPrice.toFixed(2)} → $${(this.lastBlockPrice + this.blockSize).toFixed(2)}`);
-                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice + this.blockSize, true, currentTime, this.accumulatedVolume, null);
+                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice + this.blockSize, true, currentTime, this.accumulatedVolume, 0);
                 this.lastBlockPrice += this.blockSize;
                 this.accumulatedVolume = 0; // Reset volume após criar bloco
                 blocksAdded = true;
@@ -574,7 +574,7 @@ class RenkoChart {
             if (priceChange <= -this.blockSize) {
                 // Continua descendo - criar bloco vermelho (continuação)
                 console.log(`🔴 Continuando BAIXA: $${this.lastBlockPrice.toFixed(2)} → $${(this.lastBlockPrice - this.blockSize).toFixed(2)}`);
-                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice - this.blockSize, false, currentTime, this.accumulatedVolume, null);
+                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice - this.blockSize, false, currentTime, this.accumulatedVolume, 0);
                 this.lastBlockPrice -= this.blockSize;
                 this.accumulatedVolume = 0; // Reset volume após criar bloco
                 blocksAdded = true;
@@ -598,11 +598,14 @@ class RenkoChart {
         }
     }
 
-    createRenkoBlock(open, close, isGreen, time, volume = 0, reversal = null) {
+    createRenkoBlock(open, close, isGreen, time, volume = 0, reversal = 0) {
         if (!open || !close || isNaN(open) || isNaN(close)) {
             console.warn('Dados inválidos para criar bloco Renko');
             return;
         }
+
+        // Garantir que reversal seja sempre um número (0 se for null/undefined)
+        const reversalValue = reversal !== null && reversal !== undefined ? reversal : 0;
 
         const block = {
             time: Math.floor(time) + this.renkoBlocks.length, // Usar índice sequencial para evitar sobreposição
@@ -611,19 +614,19 @@ class RenkoChart {
             low: isGreen ? parseFloat(open.toFixed(2)) : parseFloat(close.toFixed(2)),
             close: parseFloat(close.toFixed(2)),
             volume: parseFloat(volume.toFixed(2)),
-            reversal: reversal, // 1 para reversão alta, -1 para reversão baixa, null para continuação
+            reversal: reversalValue, // 1 para reversão alta, -1 para reversão baixa, 0 para continuação
             isGreen: isGreen
         };
 
-        const reversalText = reversal === 1 ? ' 🔄⬆️ REVERSÃO ALTA' :
-            reversal === -1 ? ' 🔄⬇️ REVERSÃO BAIXA' : '';
+        const reversalText = reversalValue === 1 ? ' 🔄⬆️ REVERSÃO ALTA' :
+            reversalValue === -1 ? ' 🔄⬇️ REVERSÃO BAIXA' : '';
 
         console.log(`📦 Criando bloco Renko: ${isGreen ? '🟢' : '🔴'} $${open.toFixed(2)} → $${close.toFixed(2)}, Volume: $${volume.toFixed(2)}${reversalText}`);
 
         this.renkoBlocks.push(block);
 
         // Adicionar marcador de reversão se necessário
-        if (reversal !== null) {
+        if (reversalValue !== 0) {
             this.addReversalMarker(block);
         }
 
@@ -645,7 +648,10 @@ class RenkoChart {
             return;
         }
 
-        if (block.reversal === 1) {
+        // Garantir que reversal seja tratado como número
+        const reversalValue = block.reversal !== null && block.reversal !== undefined ? block.reversal : 0;
+
+        if (reversalValue === 1) {
             // Reversão de alta - marcador verde acima do bloco
             console.log(`📍 Adicionando marcador de reversão ALTA em $${block.close.toFixed(2)}`);
             this.reversalMarkers.push({
@@ -655,7 +661,7 @@ class RenkoChart {
                 text: '⬆',
                 size: 2
             });
-        } else if (block.reversal === -1) {
+        } else if (reversalValue === -1) {
             // Reversão de baixa - marcador vermelho abaixo do bloco
             console.log(`📍 Adicionando marcador de reversão BAIXA em $${block.close.toFixed(2)}`);
             this.reversalMarkers.push({
@@ -694,7 +700,10 @@ class RenkoChart {
         this.reversalMarkers = [];
 
         this.renkoBlocks.forEach(block => {
-            if (block.reversal === 1) {
+            // Garantir que reversal seja tratado como número
+            const reversalValue = block.reversal !== null && block.reversal !== undefined ? block.reversal : 0;
+
+            if (reversalValue === 1) {
                 this.reversalMarkers.push({
                     time: block.time,
                     position: 'aboveBar',
@@ -702,7 +711,7 @@ class RenkoChart {
                     text: '⬆',
                     size: 2
                 });
-            } else if (block.reversal === -1) {
+            } else if (reversalValue === -1) {
                 this.reversalMarkers.push({
                     time: block.time,
                     position: 'belowBar',
