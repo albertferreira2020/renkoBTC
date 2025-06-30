@@ -1,0 +1,268 @@
+// Utilitários e configurações adicionais para o gráfico Renko
+
+// Configurações predefinidas para diferentes timeframes de Renko
+export const RENKO_PRESETS = {
+    SCALPING: { blockSize: 5, name: 'Scalping ($5)' },
+    INTRADAY: { blockSize: 10, name: 'Intraday ($10)' },
+    SWING: { blockSize: 25, name: 'Swing ($25)' },
+    POSITION: { blockSize: 50, name: 'Position ($50)' }
+};
+
+// Pares de trading disponíveis na Binance
+export const TRADING_PAIRS = {
+    BTCUSDT: { symbol: 'btcusdt', name: 'Bitcoin/USDT', decimals: 2 },
+    ETHUSDT: { symbol: 'ethusdt', name: 'Ethereum/USDT', decimals: 2 },
+    BNBUSDT: { symbol: 'bnbusdt', name: 'BNB/USDT', decimals: 2 },
+    ADAUSDT: { symbol: 'adausdt', name: 'Cardano/USDT', decimals: 4 },
+    SOLUSDT: { symbol: 'solusdt', name: 'Solana/USDT', decimals: 2 }
+};
+
+// Temas de cores para o gráfico
+export const CHART_THEMES = {
+    DARK: {
+        background: '#0d1421',
+        textColor: '#d1d4dc',
+        gridColor: 'rgba(197, 203, 206, 0.1)',
+        upColor: '#0ecb81',
+        downColor: '#f6465d'
+    },
+    LIGHT: {
+        background: '#ffffff',
+        textColor: '#333333',
+        gridColor: 'rgba(0, 0, 0, 0.1)',
+        upColor: '#26a69a',
+        downColor: '#ef5350'
+    },
+    CLASSIC: {
+        background: '#1e1e1e',
+        textColor: '#ffffff',
+        gridColor: 'rgba(255, 255, 255, 0.1)',
+        upColor: '#00ff00',
+        downColor: '#ff0000'
+    }
+};
+
+// Classe para gerenciar sons de notificação
+export class SoundManager {
+    constructor() {
+        this.audioContext = null;
+        this.sounds = new Map();
+        this.isEnabled = false;
+        this.init();
+    }
+
+    async init() {
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            this.isEnabled = true;
+        } catch (error) {
+            console.warn('Audio context não disponível:', error);
+        }
+    }
+
+    // Criar som de bloco verde (tom mais alto)
+    createGreenBlockSound() {
+        if (!this.isEnabled) return;
+
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(this.audioContext.destination);
+
+        oscillator.frequency.setValueAtTime(800, this.audioContext.currentTime);
+        oscillator.type = 'sine';
+
+        gainNode.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.2);
+
+        oscillator.start(this.audioContext.currentTime);
+        oscillator.stop(this.audioContext.currentTime + 0.2);
+    }
+
+    // Criar som de bloco vermelho (tom mais baixo)
+    createRedBlockSound() {
+        if (!this.isEnabled) return;
+
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(this.audioContext.destination);
+
+        oscillator.frequency.setValueAtTime(400, this.audioContext.currentTime);
+        oscillator.type = 'sine';
+
+        gainNode.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.3);
+
+        oscillator.start(this.audioContext.currentTime);
+        oscillator.stop(this.audioContext.currentTime + 0.3);
+    }
+}
+
+// Classe para calcular indicadores técnicos adicionais
+export class TechnicalIndicators {
+    constructor() {
+        this.priceHistory = [];
+    }
+
+    addPrice(price) {
+        this.priceHistory.push(price);
+
+        // Manter apenas os últimos 200 preços para performance
+        if (this.priceHistory.length > 200) {
+            this.priceHistory.shift();
+        }
+    }
+
+    // Calcular média móvel simples
+    calculateSMA(period = 20) {
+        if (this.priceHistory.length < period) return null;
+
+        const slice = this.priceHistory.slice(-period);
+        const sum = slice.reduce((acc, price) => acc + price, 0);
+        return sum / period;
+    }
+
+    // Calcular volatilidade
+    calculateVolatility(period = 20) {
+        if (this.priceHistory.length < period) return null;
+
+        const slice = this.priceHistory.slice(-period);
+        const mean = slice.reduce((acc, price) => acc + price, 0) / period;
+
+        const variance = slice.reduce((acc, price) => {
+            return acc + Math.pow(price - mean, 2);
+        }, 0) / period;
+
+        return Math.sqrt(variance);
+    }
+
+    // Detectar tendência baseada nos últimos blocos
+    detectTrend(blocks, period = 10) {
+        if (blocks.length < period) return 'NEUTRO';
+
+        const recentBlocks = blocks.slice(-period);
+        const greenCount = recentBlocks.filter(block => block.isGreen).length;
+        const redCount = period - greenCount;
+
+        if (greenCount > redCount * 1.5) return 'ALTA FORTE';
+        if (greenCount > redCount) return 'ALTA';
+        if (redCount > greenCount * 1.5) return 'BAIXA FORTE';
+        if (redCount > greenCount) return 'BAIXA';
+
+        return 'NEUTRO';
+    }
+}
+
+// Classe para persistir dados localmente
+export class DataPersistence {
+    constructor() {
+        this.storageKey = 'renko_chart_data';
+    }
+
+    // Salvar configurações do usuário
+    saveSettings(settings) {
+        try {
+            localStorage.setItem(`${this.storageKey}_settings`, JSON.stringify(settings));
+        } catch (error) {
+            console.warn('Erro ao salvar configurações:', error);
+        }
+    }
+
+    // Carregar configurações do usuário
+    loadSettings() {
+        try {
+            const saved = localStorage.getItem(`${this.storageKey}_settings`);
+            return saved ? JSON.parse(saved) : null;
+        } catch (error) {
+            console.warn('Erro ao carregar configurações:', error);
+            return null;
+        }
+    }
+
+    // Salvar histórico de blocos (últimos 1000)
+    saveBlockHistory(blocks) {
+        try {
+            const limited = blocks.slice(-1000); // Manter apenas os últimos 1000 blocos
+            localStorage.setItem(`${this.storageKey}_blocks`, JSON.stringify(limited));
+        } catch (error) {
+            console.warn('Erro ao salvar histórico:', error);
+        }
+    }
+
+    // Carregar histórico de blocos
+    loadBlockHistory() {
+        try {
+            const saved = localStorage.getItem(`${this.storageKey}_blocks`);
+            return saved ? JSON.parse(saved) : [];
+        } catch (error) {
+            console.warn('Erro ao carregar histórico:', error);
+            return [];
+        }
+    }
+
+    // Limpar todos os dados salvos
+    clearAllData() {
+        try {
+            localStorage.removeItem(`${this.storageKey}_settings`);
+            localStorage.removeItem(`${this.storageKey}_blocks`);
+        } catch (error) {
+            console.warn('Erro ao limpar dados:', error);
+        }
+    }
+}
+
+// Função utilitária para formatar números
+export const formatPrice = (price, decimals = 2) => {
+    return price.toLocaleString('pt-BR', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    });
+};
+
+// Função utilitária para formatar porcentagem
+export const formatPercentage = (value, decimals = 2) => {
+    const sign = value >= 0 ? '+' : '';
+    return `${sign}${value.toFixed(decimals)}%`;
+};
+
+// Função utilitária para calcular diferença de tempo
+export const formatTimeDifference = (timestamp) => {
+    const now = Date.now();
+    const diff = now - timestamp;
+
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+};
+
+// Função para detectar dispositivo móvel
+export const isMobileDevice = () => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
+// Função para validar conexão WebSocket
+export const isWebSocketSupported = () => {
+    return 'WebSocket' in window && window.WebSocket.CLOSING === 2;
+};
+
+// Exportar todas as funcionalidades como default
+export default {
+    RENKO_PRESETS,
+    TRADING_PAIRS,
+    CHART_THEMES,
+    SoundManager,
+    TechnicalIndicators,
+    DataPersistence,
+    formatPrice,
+    formatPercentage,
+    formatTimeDifference,
+    isMobileDevice,
+    isWebSocketSupported
+};
