@@ -455,7 +455,8 @@ class RenkoChart {
                 this.lastBlockPrice + this.blockSize,
                 true, // Começar com verde
                 currentTime,
-                this.accumulatedVolume
+                this.accumulatedVolume,
+                null // Primeiro bloco não é reversão
             );
             this.lastBlockPrice += this.blockSize;
             this.lastBlockDirection = 'up';
@@ -485,16 +486,16 @@ class RenkoChart {
         if (this.lastBlockDirection === 'up') {
             // Se o último bloco foi para cima
             if (priceChange >= this.blockSize) {
-                // Continua subindo - criar bloco verde
+                // Continua subindo - criar bloco verde (continuação)
                 console.log(`🟢 Continuando ALTA: $${this.lastBlockPrice.toFixed(2)} → $${(this.lastBlockPrice + this.blockSize).toFixed(2)}`);
-                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice + this.blockSize, true, currentTime, this.accumulatedVolume);
+                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice + this.blockSize, true, currentTime, this.accumulatedVolume, null);
                 this.lastBlockPrice += this.blockSize;
                 this.accumulatedVolume = 0; // Reset volume após criar bloco
                 blocksAdded = true;
             } else if (priceChange <= -(this.blockSize * 2)) {
                 // Reversão para baixo - precisa quebrar 2 blocos para reverter
                 console.log(`🔴 REVERSÃO para BAIXA: $${this.lastBlockPrice.toFixed(2)} → $${(this.lastBlockPrice - this.blockSize).toFixed(2)}`);
-                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice - this.blockSize, false, currentTime, this.accumulatedVolume);
+                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice - this.blockSize, false, currentTime, this.accumulatedVolume, -1);
                 this.lastBlockPrice -= this.blockSize;
                 this.lastBlockDirection = 'down';
                 this.accumulatedVolume = 0; // Reset volume após criar bloco
@@ -503,16 +504,16 @@ class RenkoChart {
         } else if (this.lastBlockDirection === 'down') {
             // Se o último bloco foi para baixo
             if (priceChange <= -this.blockSize) {
-                // Continua descendo - criar bloco vermelho
+                // Continua descendo - criar bloco vermelho (continuação)
                 console.log(`🔴 Continuando BAIXA: $${this.lastBlockPrice.toFixed(2)} → $${(this.lastBlockPrice - this.blockSize).toFixed(2)}`);
-                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice - this.blockSize, false, currentTime, this.accumulatedVolume);
+                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice - this.blockSize, false, currentTime, this.accumulatedVolume, null);
                 this.lastBlockPrice -= this.blockSize;
                 this.accumulatedVolume = 0; // Reset volume após criar bloco
                 blocksAdded = true;
             } else if (priceChange >= (this.blockSize * 2)) {
                 // Reversão para cima - precisa quebrar 2 blocos para reverter
                 console.log(`🟢 REVERSÃO para ALTA: $${this.lastBlockPrice.toFixed(2)} → $${(this.lastBlockPrice + this.blockSize).toFixed(2)}`);
-                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice + this.blockSize, true, currentTime, this.accumulatedVolume);
+                this.createRenkoBlock(this.lastBlockPrice, this.lastBlockPrice + this.blockSize, true, currentTime, this.accumulatedVolume, 1);
                 this.lastBlockPrice += this.blockSize;
                 this.lastBlockDirection = 'up';
                 this.accumulatedVolume = 0; // Reset volume após criar bloco
@@ -529,7 +530,7 @@ class RenkoChart {
         }
     }
 
-    createRenkoBlock(open, close, isGreen, time, volume = 0) {
+    createRenkoBlock(open, close, isGreen, time, volume = 0, reversal = null) {
         if (!open || !close || isNaN(open) || isNaN(close)) {
             console.warn('Dados inválidos para criar bloco Renko');
             return;
@@ -542,10 +543,14 @@ class RenkoChart {
             low: isGreen ? parseFloat(open.toFixed(2)) : parseFloat(close.toFixed(2)),
             close: parseFloat(close.toFixed(2)),
             volume: parseFloat(volume.toFixed(2)),
+            reversal: reversal, // 1 para reversão alta, -1 para reversão baixa, null para continuação
             isGreen: isGreen
         };
 
-        console.log(`📦 Criando bloco Renko: ${isGreen ? '🟢' : '🔴'} $${open.toFixed(2)} → $${close.toFixed(2)}, Volume: $${volume.toFixed(2)}`);
+        const reversalText = reversal === 1 ? ' 🔄⬆️ REVERSÃO ALTA' :
+            reversal === -1 ? ' 🔄⬇️ REVERSÃO BAIXA' : '';
+
+        console.log(`📦 Criando bloco Renko: ${isGreen ? '🟢' : '🔴'} $${open.toFixed(2)} → $${close.toFixed(2)}, Volume: $${volume.toFixed(2)}${reversalText}`);
 
         this.renkoBlocks.push(block);
 
@@ -584,7 +589,8 @@ class RenkoChart {
                 close: block.close,
                 high: block.high,
                 low: block.low,
-                volume: block.volume || 0
+                volume: block.volume || 0,
+                reversal: block.reversal // Incluir campo reversal
             };
 
             console.log('💾 Salvando bloco Renko no banco de dados:', renkoData);
@@ -611,7 +617,8 @@ class RenkoChart {
                         created_at: new Date().toISOString(),
                         open: block.open,
                         close: block.close,
-                        volume: block.volume || 0
+                        volume: block.volume || 0,
+                        reversal: block.reversal // Manter reversal no fallback
                     };
 
                     const fallbackResponse = await fetch(`${this.supabaseUrl}/botbinance`, {
@@ -627,10 +634,71 @@ class RenkoChart {
 
                     if (!fallbackResponse.ok) {
                         const fallbackErrorText = await fallbackResponse.text();
-                        throw new Error(`Erro HTTP ${fallbackResponse.status}: ${fallbackErrorText}`);
+
+                        // Se ainda falhar e for sobre reversal, tentar sem reversal
+                        if (fallbackErrorText.includes('reversal')) {
+                            console.warn('⚠️ Campo reversal não existe, tentando sem ele...');
+
+                            renkoData = {
+                                created_at: new Date().toISOString(),
+                                open: block.open,
+                                close: block.close,
+                                volume: block.volume || 0
+                            };
+
+                            const finalFallbackResponse = await fetch(`${this.supabaseUrl}/botbinance`, {
+                                method: 'POST',
+                                headers: {
+                                    'apikey': this.supabaseKey,
+                                    'Authorization': `Bearer ${this.supabaseKey}`,
+                                    'Content-Type': 'application/json',
+                                    'Prefer': 'return=minimal'
+                                },
+                                body: JSON.stringify(renkoData)
+                            });
+
+                            if (!finalFallbackResponse.ok) {
+                                const finalErrorText = await finalFallbackResponse.text();
+                                throw new Error(`Erro HTTP ${finalFallbackResponse.status}: ${finalErrorText}`);
+                            }
+
+                            console.log('✅ Bloco Renko salvo no banco (sem high/low/reversal)');
+                        } else {
+                            throw new Error(`Erro HTTP ${fallbackResponse.status}: ${fallbackErrorText}`);
+                        }
+                    } else {
+                        console.log('✅ Bloco Renko salvo no banco (sem high/low, com reversal)');
+                    }
+                } else if (errorText.includes('reversal')) {
+                    // Se erro for especificamente sobre reversal, tentar sem ele
+                    console.warn('⚠️ Campo reversal não existe, tentando sem ele...');
+
+                    renkoData = {
+                        created_at: new Date().toISOString(),
+                        open: block.open,
+                        close: block.close,
+                        high: block.high,
+                        low: block.low,
+                        volume: block.volume || 0
+                    };
+
+                    const reversalFallbackResponse = await fetch(`${this.supabaseUrl}/botbinance`, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': this.supabaseKey,
+                            'Authorization': `Bearer ${this.supabaseKey}`,
+                            'Content-Type': 'application/json',
+                            'Prefer': 'return=minimal'
+                        },
+                        body: JSON.stringify(renkoData)
+                    });
+
+                    if (!reversalFallbackResponse.ok) {
+                        const reversalErrorText = await reversalFallbackResponse.text();
+                        throw new Error(`Erro HTTP ${reversalFallbackResponse.status}: ${reversalErrorText}`);
                     }
 
-                    console.log('✅ Bloco Renko salvo no banco (sem high/low)');
+                    console.log('✅ Bloco Renko salvo no banco (sem reversal)');
                 } else {
                     throw new Error(`Erro HTTP ${response.status}: ${errorText}`);
                 }
