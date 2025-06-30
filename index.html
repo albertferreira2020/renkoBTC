@@ -178,6 +178,15 @@
             color: #ffffff;
             font-weight: 600;
         }
+
+        .save-status.success {
+            color: #0ecb81 !important;
+        }
+
+        .save-status.error {
+            color: #f6465d !important;
+            font-size: 10px;
+        }
     </style>
 </head>
 <body>
@@ -225,10 +234,15 @@
                     <span class="stat-label">Último Movimento:</span>
                     <span class="stat-value" id="lastDirection">-</span>
                 </div>
+                <div class="stat-item">
+                    <span class="stat-label">Status BD:</span>
+                    <span class="stat-value" id="saveStatus">-</span>
+                </div>
             </div>
         </div>
     </div>
 
+    <script src="config.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

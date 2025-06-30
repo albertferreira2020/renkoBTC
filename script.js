@@ -18,16 +18,31 @@ class RenkoChart {
             lastDirection: null
         };
 
+        // Configuração do Supabase - será carregada do arquivo config
+        this.supabaseUrl = null;
+        this.supabaseKey = null;
+
         this.init();
     }
 
     init() {
         // Aguardar um pouco para garantir que o CSS foi aplicado
         setTimeout(() => {
+            this.loadConfig();
             this.createChart();
             this.setupEventListeners();
             this.connectWebSocket();
         }, 100);
+    }
+
+    async loadConfig() {
+        // Aguardar configuração ser carregada
+        if (window.appConfig) {
+            await window.appConfig.loadConfig();
+            this.supabaseUrl = window.appConfig.getSupabaseUrl();
+            this.supabaseKey = window.appConfig.getSupabaseKey();
+            console.log('✅ Configuração do Supabase carregada');
+        }
     }
 
     createChart() {
@@ -296,6 +311,9 @@ class RenkoChart {
 
         this.renkoBlocks.push(block);
 
+        // Registrar bloco no Supabase
+        this.registerBlockInSupabase(block);
+
         // Atualizar estatísticas
         this.stats.totalBlocks++;
         if (isGreen) {
@@ -304,6 +322,75 @@ class RenkoChart {
         } else {
             this.stats.redBlocks++;
             this.stats.lastDirection = 'BAIXA';
+        }
+    }
+
+    async registerBlockInSupabase(block) {
+        try {
+            // Verificar se a configuração está disponível
+            if (!this.supabaseUrl || !this.supabaseKey) {
+                console.warn('Configuração do Supabase não encontrada, pulando salvamento');
+                return;
+            }
+
+            // Validar se o bloco é válido
+            if (!block || !block.open || !block.close) {
+                console.warn('Bloco inválido, não será registrado:', block);
+                return;
+            }
+
+            const renkoData = {
+                created_at: new Date().toISOString(),
+                open: block.open,
+                close: block.close,
+                volume: 0 // Placeholder, pode ser ajustado se você tiver dados de volume
+            };
+
+            console.log('💾 Salvando bloco Renko no banco de dados:', renkoData);
+
+            const response = await fetch(`${this.supabaseUrl}/botbinance`, {
+                method: 'POST',
+                headers: {
+                    'apikey': this.supabaseKey,
+                    'Authorization': `Bearer ${this.supabaseKey}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify(renkoData)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Erro HTTP ${response.status}: ${errorText}`);
+            }
+
+            console.log('✅ Bloco Renko salvo no banco com sucesso');
+
+            // Atualizar UI para mostrar que foi salvo
+            this.updateSaveStatus(true);
+
+        } catch (error) {
+            console.error('❌ Erro ao salvar bloco Renko no banco:', error);
+            this.updateSaveStatus(false, error.message);
+        }
+    }
+
+    updateSaveStatus(success, errorMessage = '') {
+        const statusElement = document.getElementById('saveStatus');
+        if (statusElement) {
+            if (success) {
+                statusElement.innerHTML = '✅ Salvo no BD';
+                statusElement.className = 'save-status success';
+            } else {
+                statusElement.innerHTML = `❌ Erro BD: ${errorMessage}`;
+                statusElement.className = 'save-status error';
+            }
+
+            // Limpar status após 3 segundos
+            setTimeout(() => {
+                statusElement.innerHTML = '';
+                statusElement.className = 'save-status';
+            }, 3000);
         }
     }
 
