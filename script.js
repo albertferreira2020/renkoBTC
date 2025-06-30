@@ -652,7 +652,6 @@ class RenkoChart {
                 time: block.time,
                 position: 'aboveBar',
                 color: '#0ecb81',
-                shape: 'arrowUp',
                 text: '⬆',
                 size: 2
             });
@@ -663,7 +662,6 @@ class RenkoChart {
                 time: block.time,
                 position: 'belowBar',
                 color: '#f6465d',
-                shape: 'arrowDown',
                 text: '⬇',
                 size: 2
             });
@@ -701,7 +699,6 @@ class RenkoChart {
                     time: block.time,
                     position: 'aboveBar',
                     color: '#0ecb81',
-                    shape: 'arrowUp',
                     text: '⬆',
                     size: 2
                 });
@@ -710,7 +707,6 @@ class RenkoChart {
                     time: block.time,
                     position: 'belowBar',
                     color: '#f6465d',
-                    shape: 'arrowDown',
                     text: '⬇',
                     size: 2
                 });
