@@ -97,16 +97,38 @@
             flex: 1;
             position: relative;
             background: #0d1421;
-            overflow: visible;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 400px; /* Garantir altura mínima */
+        }
+
+        .main-chart {
+            width: 100%;
+            flex: 4; /* 4 partes de 5 = 80% */
+            min-height: 320px; /* Altura mínima para o gráfico principal */
+            position: relative;
+            z-index: 1;
+        }
+
+        .rsi-chart {
+            width: 100%;
+            flex: 1; /* 1 parte de 5 = 20% */
+            min-height: 80px; /* Altura mínima para RSI */
+            position: relative;
+            z-index: 1;
+            border-top: 1px solid #2b3139;
+            background: #0d1421;
         }
 
         #chart {
             width: 100%;
             height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
+        }
+
+        #rsi-chart {
+            width: 100%;
+            height: 100%;
         }
 
         .settings {
@@ -118,6 +140,7 @@
             border-radius: 8px;
             border: 1px solid #2b3139;
             backdrop-filter: blur(10px);
+            z-index: 10;
             z-index: 10;
         }
 
@@ -226,6 +249,26 @@
             z-index: 11;
             position: relative;
         }
+
+        /* Estilos para RSI */
+        .rsi-overbought {
+            color: #f6465d !important;
+            font-weight: bold;
+        }
+
+        .rsi-oversold {
+            color: #0ecb81 !important;
+            font-weight: bold;
+        }
+
+        .rsi-neutral {
+            color: #d1d4dc;
+        }
+
+        .rsi-value {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -243,7 +286,8 @@
         </div>
         
         <div class="chart-container">
-            <div id="chart"></div>
+            <div id="chart" class="main-chart"></div>
+            <div id="rsi-chart" class="rsi-chart"></div>
             
             <div class="settings">
                 <div class="setting-item">
@@ -253,6 +297,10 @@
                 <div class="setting-item">
                     <label>Zoom:</label>
                     <input type="range" id="zoomLevel" min="1" max="10" value="5" step="1">
+                </div>
+                <div class="setting-item">
+                    <label>RSI Período:</label>
+                    <input type="number" id="rsiPeriod" value="14" min="5" max="50" step="1">
                 </div>
             </div>
 
@@ -276,6 +324,14 @@
                 <div class="stat-item">
                     <span class="stat-label">Volume Atual:</span>
                     <span class="stat-value" id="currentVolume">$0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">RSI (14):</span>
+                    <span class="stat-value" id="rsiValue">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">RSI Status:</span>
+                    <span class="stat-value" id="rsiStatus">-</span>
                 </div>
                 <div class="stat-item">
                     <span class="stat-label">Status BD:</span>
@@ -308,6 +364,6 @@
     </div>
 
     <script src="src/js/config.js"></script>
-    <script src="src/js/script.js"></script>
+    <script type="module" src="src/js/script.js"></script>
 </body>
 </html>

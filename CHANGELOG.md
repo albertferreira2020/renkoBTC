@@ -2,6 +2,50 @@
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
+## [1.2.0] - 2025-06-30
+
+### ✨ Novo: Indicador RSI
+
+#### 🎯 Adicionado
+- **Classe RSICalculator** em `src/js/utils.js`
+  - Cálculo de RSI em tempo real
+  - Período configurável (5-50)
+  - Classificação automática (Sobrecomprado/Sobrevendido/Neutro)
+  - Otimização de memória e performance
+
+#### 🖥️ Interface do RSI
+- **Controle de período** RSI ajustável na interface
+- **Exibição em tempo real** do valor RSI atual
+- **Status visual** com cores dinâmicas:
+  - 🔴 Vermelho: Sobrecomprado (RSI ≥ 70)
+  - 🟢 Verde: Sobrevendido (RSI ≤ 30)
+  - ⚪ Branco: Neutro (30-70)
+
+#### 🔧 Integração Técnica
+- **Módulos ES6**: Conversão para `type="module"` 
+- **Import/Export**: Arquitetura modular limpa
+- **Reset automático**: RSI é resetado junto com o gráfico
+- **Logs detalhados**: Tracking de valores RSI no console
+
+#### 📚 Documentação
+- **RSI_INDICATOR.md**: Documentação completa do RSI
+- **test-rsi.html**: Página de testes do indicador
+- **Exemplos práticos**: Estratégias de trading com RSI
+
+### 🛠️ Correções
+- **Módulos ES6**: Corrigido erro de import statement
+- **Servidor HTTP**: Ajuste para portas alternativas
+- **Performance**: Otimizações no cálculo de indicadores
+
+### 🎯 Benefícios do RSI
+1. **Análise de Momentum**: Identificação de sobrecompra/sobrevenda
+2. **Sinais de Entrada**: Pontos de reversão potencial
+3. **Confirmação**: Validação de sinais Renko
+4. **Tempo Real**: Cálculo instantâneo a cada tick
+5. **Customização**: Período ajustável conforme estratégia
+
+---
+
 ## [1.1.0] - 2025-06-30
 
 ### 🏗️ Refatoração da Arquitetura

@@ -1,10 +1,16 @@
 // Gráfico Renko em tempo real usando Lightweight Charts
 // A biblioteca já está carregada via script tag no HTML
 
+// Importar a classe RSI do utils.js
+import { RSICalculator } from './utils.js';
+
 class RenkoChart {
     constructor() {
         this.chart = null;
+        this.rsiChart = null; // Gráfico separado para RSI
         this.candlestickSeries = null;
+        this.rsiSeries = null; // Série para o gráfico RSI
+        this.rsiData = []; // Dados do RSI para o gráfico
         this.reversalMarkers = []; // Array para armazenar marcadores
         this.ws = null;
         this.currentPrice = 0;
@@ -39,6 +45,11 @@ class RenkoChart {
             imbalance: 0,
             lastUpdate: null
         };
+
+        // RSI
+        this.rsiCalculator = new RSICalculator(14); // Período padrão de 14
+        this.rsiPeriod = 14;
+        this.rsiHistory = [];
 
         this.init();
     } init() {
@@ -280,120 +291,253 @@ class RenkoChart {
         } catch (error) {
             console.warn('Erro na sincronização periódica:', error);
         }
-    }
-
-    createChart() {
+    } createChart() {
         const chartContainer = document.getElementById('chart');
+        const rsiChartContainer = document.getElementById('rsi-chart');
 
-        console.log('📊 Criando gráfico...');
-        console.log('Chart container element:', chartContainer);
-        console.log('Container parent:', chartContainer.parentElement);
-        console.log('Container styles:', window.getComputedStyle(chartContainer));
-        console.log('Container dimensions:', {
-            clientWidth: chartContainer.clientWidth,
-            clientHeight: chartContainer.clientHeight,
-            offsetWidth: chartContainer.offsetWidth,
-            offsetHeight: chartContainer.offsetHeight,
-            scrollWidth: chartContainer.scrollWidth,
-            scrollHeight: chartContainer.scrollHeight
-        });
+        console.log('📊 Criando gráficos principal e RSI...');
+        console.log('Chart container:', chartContainer);
+        console.log('RSI container:', rsiChartContainer);
 
-        if (!chartContainer.clientWidth || !chartContainer.clientHeight) {
-            console.warn('⚠️ Container com dimensões inválidas, aguardando...');
+        if (!chartContainer || !rsiChartContainer) {
+            console.error('❌ Containers não encontrados!');
             setTimeout(() => this.createChart(), 200);
             return;
         }
 
-        console.log('📦 Tentando criar gráfico com LightweightCharts...');
+        // Usar as dimensões naturais dos containers respeitando o flexbox
+        const chartWidth = Math.max(chartContainer.clientWidth, 800);
+        const chartHeight = chartContainer.clientHeight || 400; // Usar altura natural ou fallback
+        const rsiWidth = Math.max(rsiChartContainer.clientWidth, 800);
+        const rsiHeight = rsiChartContainer.clientHeight || 100; // Usar altura natural ou fallback
+
+        console.log('Chart dimensions:', { chartWidth, chartHeight });
+        console.log('RSI dimensions:', { rsiWidth, rsiHeight });
+
+        if (chartWidth < 100 || chartHeight < 100) {
+            console.warn('⚠️ Dimensões ainda muito pequenas, aguardando...');
+            setTimeout(() => this.createChart(), 500);
+            return;
+        }
+
+        console.log('📦 Tentando criar gráficos com LightweightCharts...');
 
         try {
-            this.chart = LightweightCharts.createChart(chartContainer, {
-                width: chartContainer.clientWidth,
-                height: chartContainer.clientHeight,
-                layout: {
-                    background: {
-                        color: '#0d1421',
-                    },
-                    textColor: '#d1d4dc',
-                },
-                grid: {
-                    vertLines: {
-                        color: 'rgba(197, 203, 206, 0.1)',
-                    },
-                    horzLines: {
-                        color: 'rgba(197, 203, 206, 0.1)',
-                    },
-                },
-                crosshair: {
-                    mode: 1,
-                },
-                rightPriceScale: {
-                    borderColor: 'rgba(197, 203, 206, 0.2)',
-                    textColor: '#d1d4dc',
-                },
-                timeScale: {
-                    borderColor: 'rgba(197, 203, 206, 0.2)',
-                    textColor: '#d1d4dc',
-                    timeVisible: false,
-                    secondsVisible: false,
-                },
-                handleScroll: {
-                    mouseWheel: true,
-                    pressedMouseMove: true,
-                },
-                handleScale: {
-                    axisPressedMouseMove: true,
-                    mouseWheel: true,
-                    pinch: true,
-                },
-            });
+            // Criar gráfico principal (Renko)
+            this.createMainChart(chartContainer, chartWidth, chartHeight);
 
-            console.log('✅ Gráfico criado com sucesso');
-            console.log('Chart object:', this.chart);
+            // Criar gráfico RSI
+            this.createRSIChart(rsiChartContainer, rsiWidth, rsiHeight);
 
-            this.candlestickSeries = this.chart.addCandlestickSeries({
-                upColor: '#0ecb81',
-                downColor: '#f6465d',
-                borderDownColor: '#f6465d',
-                borderUpColor: '#0ecb81',
-                wickDownColor: '#f6465d',
-                wickUpColor: '#0ecb81',
-            });
-
-            console.log('✅ Série de candlesticks adicionada');
-
-            // Adicionar linha de preço atual
-            this.currentPriceLine = this.chart.addLineSeries({
-                color: '#f0b90b',
-                lineWidth: 2,
-                crosshairMarkerVisible: true,
-                crosshairMarkerRadius: 6,
-                crosshairMarkerBorderColor: '#f0b90b',
-                crosshairMarkerBackgroundColor: '#f0b90b',
-            });
-
-            console.log('✅ Linha de preço atual adicionada');
-
-            // Dados de teste removidos - aguardando blocos Renko reais da Binance
-
-            // Responsividade
-            window.addEventListener('resize', () => {
-                this.chart.applyOptions({
-                    width: chartContainer.clientWidth,
-                    height: chartContainer.clientHeight,
-                });
-            });
+            console.log('✅ Ambos os gráficos criados com sucesso!');
 
         } catch (error) {
-            console.error('❌ Erro ao criar gráfico:', error);
+            console.error('❌ Erro ao criar gráficos:', error);
             console.error('Stack trace:', error.stack);
-            alert('Erro ao criar o gráfico. Verifique o console para mais detalhes.');
+            alert('Erro ao criar os gráficos. Verifique o console para mais detalhes.');
         }
+    }
+
+    createMainChart(chartContainer, width, height) {
+        this.chart = LightweightCharts.createChart(chartContainer, {
+            width: width,
+            height: height,
+            layout: {
+                background: {
+                    color: '#0d1421',
+                },
+                textColor: '#d1d4dc',
+            },
+            grid: {
+                vertLines: {
+                    color: 'rgba(197, 203, 206, 0.1)',
+                },
+                horzLines: {
+                    color: 'rgba(197, 203, 206, 0.1)',
+                },
+            },
+            crosshair: {
+                mode: 1,
+            },
+            rightPriceScale: {
+                borderColor: 'rgba(197, 203, 206, 0.2)',
+                textColor: '#d1d4dc',
+            },
+            timeScale: {
+                borderColor: 'rgba(197, 203, 206, 0.2)',
+                textColor: '#d1d4dc',
+                timeVisible: false,
+                secondsVisible: false,
+            },
+            handleScroll: {
+                mouseWheel: true,
+                pressedMouseMove: true,
+            },
+            handleScale: {
+                axisPressedMouseMove: true,
+                mouseWheel: true,
+                pinch: true,
+            },
+        });
+
+        console.log('✅ Gráfico principal criado');
+
+        this.candlestickSeries = this.chart.addCandlestickSeries({
+            upColor: '#0ecb81',
+            downColor: '#f6465d',
+            borderDownColor: '#f6465d',
+            borderUpColor: '#0ecb81',
+            wickDownColor: '#f6465d',
+            wickUpColor: '#0ecb81',
+        });
+
+        console.log('✅ Série de candlesticks adicionada');
+
+        // Adicionar linha de preço atual
+        this.currentPriceLine = this.chart.addLineSeries({
+            color: '#f0b90b',
+            lineWidth: 2,
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 6,
+            crosshairMarkerBorderColor: '#f0b90b',
+            crosshairMarkerBackgroundColor: '#f0b90b',
+        });
+
+        console.log('✅ Linha de preço atual adicionada');
+
+        // Responsividade para gráfico principal
+        window.addEventListener('resize', () => {
+            const newWidth = Math.max(chartContainer.clientWidth, 800);
+            const newHeight = chartContainer.clientHeight || 400; // Usar altura natural
+            this.chart.applyOptions({
+                width: newWidth,
+                height: newHeight,
+            });
+            if (this.rsiChart) {
+                const rsiContainer = document.getElementById('rsi-chart');
+                const rsiWidth = Math.max(rsiContainer.clientWidth, 800);
+                const rsiHeight = rsiContainer.clientHeight || 100; // Usar altura natural
+                this.rsiChart.applyOptions({
+                    width: rsiWidth,
+                    height: rsiHeight,
+                });
+            }
+        });
+    }
+
+    createRSIChart(rsiChartContainer, width, height) {
+        this.rsiChart = LightweightCharts.createChart(rsiChartContainer, {
+            width: width,
+            height: height,
+            layout: {
+                background: {
+                    color: '#0d1421',
+                },
+                textColor: '#d1d4dc',
+            },
+            grid: {
+                vertLines: {
+                    color: 'rgba(197, 203, 206, 0.05)',
+                },
+                horzLines: {
+                    color: 'rgba(197, 203, 206, 0.05)',
+                },
+            },
+            rightPriceScale: {
+                borderColor: 'rgba(197, 203, 206, 0.2)',
+                textColor: '#d1d4dc',
+                autoScale: false,
+                scaleMargins: {
+                    top: 0.1,
+                    bottom: 0.1,
+                },
+                mode: 1, // Percentage mode
+                visible: true,
+                entireTextOnly: true,
+                ticksVisible: true,
+                borderVisible: true,
+            },
+            timeScale: {
+                borderColor: 'rgba(197, 203, 206, 0.2)',
+                textColor: '#d1d4dc',
+                timeVisible: false,
+                secondsVisible: false,
+                visible: false, // Ocultar escala de tempo no RSI
+            },
+            crosshair: {
+                mode: 1,
+            },
+            handleScroll: {
+                mouseWheel: false,
+                pressedMouseMove: false,
+            },
+            handleScale: {
+                axisPressedMouseMove: false,
+                mouseWheel: false,
+                pinch: false,
+            },
+        });
+
+        console.log('✅ Gráfico RSI criado');
+
+        // Configurar escala RSI (0-100)
+        this.rsiChart.priceScale('right').applyOptions({
+            scaleMargins: {
+                top: 0.1,
+                bottom: 0.1,
+            },
+            autoScale: false,
+        });
+
+        // Adicionar série RSI
+        this.rsiSeries = this.rsiChart.addLineSeries({
+            color: '#f0b90b',
+            lineWidth: 2,
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 4,
+            crosshairMarkerBorderColor: '#f0b90b',
+            crosshairMarkerBackgroundColor: '#f0b90b',
+            priceFormat: {
+                type: 'custom',
+                formatter: (price) => price.toFixed(2),
+            },
+        });
+
+        // Adicionar linhas de referência RSI (30, 50, 70)
+        this.rsiChart.addLineSeries({
+            color: 'rgba(246, 70, 93, 0.5)',
+            lineWidth: 1,
+            lineStyle: 2, // Dashed
+            crosshairMarkerVisible: false,
+            lastValueVisible: false,
+            priceLineVisible: false,
+        }).setData([{ time: Date.now() / 1000, value: 70 }]);
+
+        this.rsiChart.addLineSeries({
+            color: 'rgba(212, 212, 212, 0.3)',
+            lineWidth: 1,
+            lineStyle: 2,
+            crosshairMarkerVisible: false,
+            lastValueVisible: false,
+            priceLineVisible: false,
+        }).setData([{ time: Date.now() / 1000, value: 50 }]);
+
+        this.rsiChart.addLineSeries({
+            color: 'rgba(14, 203, 129, 0.5)',
+            lineWidth: 1,
+            lineStyle: 2,
+            crosshairMarkerVisible: false,
+            lastValueVisible: false,
+            priceLineVisible: false,
+        }).setData([{ time: Date.now() / 1000, value: 30 }]);
+
+        console.log('✅ Série RSI e linhas de referência adicionadas');
     }
 
     setupEventListeners() {
         const blockSizeInput = document.getElementById('blockSize');
         const zoomLevelInput = document.getElementById('zoomLevel');
+        const rsiPeriodInput = document.getElementById('rsiPeriod');
 
         blockSizeInput.addEventListener('change', (e) => {
             this.blockSize = parseFloat(e.target.value);
@@ -406,6 +550,13 @@ class RenkoChart {
                 from: Math.max(0, this.renkoBlocks.length - (zoomLevel * 20)),
                 to: this.renkoBlocks.length
             });
+        });
+
+        rsiPeriodInput.addEventListener('change', (e) => {
+            this.rsiPeriod = parseInt(e.target.value);
+            this.rsiCalculator = new RSICalculator(this.rsiPeriod);
+            this.updateRSIDisplay();
+            console.log(`📊 RSI período alterado para: ${this.rsiPeriod}`);
         });
     }
 
@@ -508,6 +659,27 @@ class RenkoChart {
     }
 
     processRenkoBlock(price, volume = 0) {
+        // Calcular RSI a cada novo preço
+        const rsiValue = this.rsiCalculator.addPrice(price);
+        this.updateRSIDisplay(rsiValue);
+
+        // Atualizar gráfico RSI se temos um valor válido
+        if (rsiValue !== null && this.rsiSeries) {
+            const currentTime = Date.now() / 1000;
+            this.rsiData.push({
+                time: currentTime,
+                value: rsiValue
+            });
+
+            // Manter apenas os últimos 500 pontos RSI
+            if (this.rsiData.length > 500) {
+                this.rsiData.shift();
+            }
+
+            this.rsiSeries.setData(this.rsiData);
+            console.log(`📈 RSI gráfico atualizado: ${rsiValue.toFixed(2)}`);
+        }
+
         // Acumular volume para o bloco atual
         this.accumulatedVolume += volume;
 
@@ -1037,11 +1209,54 @@ class RenkoChart {
         }
     }
 
+    updateRSIDisplay(rsiValue = null) {
+        const rsiValueElement = document.getElementById('rsiValue');
+        const rsiStatusElement = document.getElementById('rsiStatus');
+
+        if (rsiValue !== null && rsiValue !== undefined) {
+            // Atualizar valor do RSI
+            rsiValueElement.textContent = rsiValue.toFixed(2);
+            rsiValueElement.className = 'stat-value rsi-value';
+
+            // Atualizar status do RSI
+            const rsiLevel = this.rsiCalculator.getRSILevel();
+            rsiStatusElement.textContent = rsiLevel;
+
+            // Aplicar cores baseadas no nível
+            rsiValueElement.classList.remove('rsi-overbought', 'rsi-oversold', 'rsi-neutral');
+            rsiStatusElement.classList.remove('rsi-overbought', 'rsi-oversold', 'rsi-neutral');
+
+            if (rsiLevel === 'SOBRECOMPRADO') {
+                rsiValueElement.classList.add('rsi-overbought');
+                rsiStatusElement.classList.add('rsi-overbought');
+            } else if (rsiLevel === 'SOBREVENDIDO') {
+                rsiValueElement.classList.add('rsi-oversold');
+                rsiStatusElement.classList.add('rsi-oversold');
+            } else {
+                rsiValueElement.classList.add('rsi-neutral');
+                rsiStatusElement.classList.add('rsi-neutral');
+            }
+
+            // Atualizar o label do período atual
+            const periodLabel = document.querySelector('label[for="rsiPeriod"]');
+            if (periodLabel) {
+                periodLabel.textContent = `RSI (${this.rsiPeriod}):`;
+            }
+
+            console.log(`📊 RSI: ${rsiValue.toFixed(2)} (${rsiLevel})`);
+        } else {
+            rsiValueElement.textContent = '-';
+            rsiStatusElement.textContent = '-';
+            rsiValueElement.className = 'stat-value';
+            rsiStatusElement.className = 'stat-value';
+        }
+    }
+
     resetChart() {
         this.renkoBlocks = [];
         this.lastBlockPrice = 0;
         this.lastBlockDirection = null;
-        this.accumulatedVolume = 0; // Reset volume acumulado
+        this.accumulatedVolume = 0;
         this.stats = {
             totalBlocks: 0,
             greenBlocks: 0,
@@ -1049,140 +1264,20 @@ class RenkoChart {
             lastDirection: null
         };
 
+        // Reset RSI
+        this.rsiCalculator.reset();
+        this.rsiData = [];
+        this.updateRSIDisplay();
+
         if (this.candlestickSeries) {
             this.candlestickSeries.setData([]);
         }
 
+        if (this.rsiSeries) {
+            this.rsiSeries.setData([]);
+        }
+
         this.updateStats();
-    }
-
-    // Método para testar marcadores (apenas para debug)
-    addTestReversalMarkers() {
-        if (this.renkoBlocks.length < 3) {
-            console.log('🧪 Não há blocos suficientes para teste de marcadores');
-            return;
-        }
-
-        // Adicionar marcadores de teste aos últimos blocos
-        const testBlocks = this.renkoBlocks.slice(-3);
-
-        // Simular uma reversão de alta no penúltimo bloco
-        if (testBlocks.length >= 2) {
-            testBlocks[testBlocks.length - 2].reversal = 1;
-            console.log('🧪 Adicionado marcador de teste: REVERSÃO ALTA');
-        }
-
-        // Simular uma reversão de baixa no último bloco
-        if (testBlocks.length >= 1) {
-            testBlocks[testBlocks.length - 1].reversal = -1;
-            console.log('🧪 Adicionado marcador de teste: REVERSÃO BAIXA');
-        }
-
-        // Atualizar marcadores
-        this.updateReversalMarkers();
-        console.log('🧪 Marcadores de teste aplicados! Verifique o gráfico.');
-    }
-
-    processOrderBookData(orderBookData) {
-        if (!orderBookData.bids || !orderBookData.asks) {
-            console.warn('⚠️ Dados de order book inválidos');
-            return;
-        }
-
-        this.currentOrderBook = orderBookData;
-        this.lastOrderBookUpdate = Date.now();
-
-        // Calcular métricas do order book
-        const metrics = this.calculateOrderBookMetrics(orderBookData);
-        this.orderBookStats = {
-            ...metrics,
-            lastUpdate: new Date().toISOString()
-        };
-
-        console.log(`📊 Order Book atualizado: Spread: ${metrics.spreadPercentage.toFixed(4)}%, Imbalance: ${metrics.imbalance.toFixed(4)}, Liquidez: $${metrics.totalLiquidity.toFixed(0)}`);
-
-        // Atualizar UI
-        this.updateOrderBookDisplay();
-    }
-
-    calculateOrderBookMetrics(orderBookData) {
-        const bids = orderBookData.bids.map(bid => ({
-            price: parseFloat(bid[0]),
-            quantity: parseFloat(bid[1])
-        }));
-
-        const asks = orderBookData.asks.map(ask => ({
-            price: parseFloat(ask[0]),
-            quantity: parseFloat(ask[1])
-        }));
-
-        // Melhores preços
-        const bestBid = bids[0];
-        const bestAsk = asks[0];
-
-        // Spread
-        const spread = bestAsk.price - bestBid.price;
-        const midPrice = (bestBid.price + bestAsk.price) / 2;
-        const spreadPercentage = (spread / midPrice) * 100;
-
-        // Liquidez agregada (top 10 níveis)
-        const bidLiquidity = bids.reduce((sum, bid) => sum + (bid.price * bid.quantity), 0);
-        const askLiquidity = asks.reduce((sum, ask) => sum + (ask.price * ask.quantity), 0);
-        const totalLiquidity = bidLiquidity + askLiquidity;
-
-        // Imbalance (-1 a +1, onde +1 = mais bids, -1 = mais asks)
-        const imbalance = (bidLiquidity - askLiquidity) / totalLiquidity;
-
-        // Preço médio ponderado
-        const weightedMidPrice = (bestBid.price * bestAsk.quantity + bestAsk.price * bestBid.quantity) /
-            (bestBid.quantity + bestAsk.quantity);
-
-        return {
-            lastUpdateId: orderBookData.lastUpdateId,
-            bestBidPrice: Math.round(bestBid.price * 100) / 100,
-            bestBidQuantity: Math.round(bestBid.quantity * 100) / 100,
-            bestAskPrice: Math.round(bestAsk.price * 100) / 100,
-            bestAskQuantity: Math.round(bestAsk.quantity * 100) / 100,
-            spread: Math.round(spread * 100) / 100,
-            spreadPercentage: Math.round(spreadPercentage * 100) / 100,
-            bidLiquidity: Math.round(bidLiquidity * 100) / 100,
-            askLiquidity: Math.round(askLiquidity * 100) / 100,
-            totalLiquidity: Math.round(totalLiquidity * 100) / 100,
-            imbalance: Math.round(imbalance * 10000) / 10000, // 4 casas para imbalance (valor pequeno)
-            weightedMidPrice: Math.round(weightedMidPrice * 100) / 100,
-            midPrice: Math.round(midPrice * 100) / 100
-        };
-    }
-
-    updateOrderBookStatus(status, isSuccess = true) {
-        const statusElement = document.getElementById('orderBookStatus');
-        if (statusElement) {
-            statusElement.innerHTML = status;
-            statusElement.className = isSuccess ? 'order-book-status success' : 'order-book-status error';
-        }
-    }
-
-    updateOrderBookDisplay() {
-        if (!this.orderBookStats.lastUpdate) return;
-
-        // Atualizar elementos da UI se existirem
-        const spreadElement = document.getElementById('spreadDisplay');
-        if (spreadElement) {
-            spreadElement.innerHTML = `Spread: ${this.orderBookStats.spreadPercentage.toFixed(2)}%`;
-        }
-
-        const liquidityElement = document.getElementById('liquidityDisplay');
-        if (liquidityElement) {
-            liquidityElement.innerHTML = `Liquidez: $${this.orderBookStats.totalLiquidity.toFixed(2)}`;
-        }
-
-        const imbalanceElement = document.getElementById('imbalanceDisplay');
-        if (imbalanceElement) {
-            const imbalanceText = this.orderBookStats.imbalance > 0 ?
-                `Mais Bids (+${(this.orderBookStats.imbalance * 100).toFixed(2)}%)` :
-                `Mais Asks (${(this.orderBookStats.imbalance * 100).toFixed(2)}%)`;
-            imbalanceElement.innerHTML = `Imbalance: ${imbalanceText}`;
-        }
     }
 }
 

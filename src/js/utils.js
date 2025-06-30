@@ -214,6 +214,105 @@ export class DataPersistence {
     }
 }
 
+// Classe para calcular o indicador RSI (Relative Strength Index)
+export class RSICalculator {
+    constructor(period = 14) {
+        this.period = period;
+        this.prices = [];
+        this.gains = [];
+        this.losses = [];
+        this.avgGain = 0;
+        this.avgLoss = 0;
+        this.rsiValues = [];
+    }
+
+    // Adiciona um novo preço e calcula o RSI
+    addPrice(price) {
+        this.prices.push(price);
+
+        // Calcular mudança de preço
+        if (this.prices.length >= 2) {
+            const change = price - this.prices[this.prices.length - 2];
+            const gain = change > 0 ? change : 0;
+            const loss = change < 0 ? Math.abs(change) : 0;
+
+            this.gains.push(gain);
+            this.losses.push(loss);
+
+            // Calcular RSI quando temos dados suficientes
+            if (this.gains.length >= this.period) {
+                this.calculateRSI();
+            }
+        }
+
+        // Manter apenas os dados necessários
+        if (this.prices.length > this.period + 10) {
+            this.prices.shift();
+            this.gains.shift();
+            this.losses.shift();
+        }
+
+        return this.getCurrentRSI();
+    }
+
+    calculateRSI() {
+        if (this.gains.length < this.period) {
+            return;
+        }
+
+        // Primeira média simples
+        if (this.avgGain === 0 && this.avgLoss === 0) {
+            const recentGains = this.gains.slice(-this.period);
+            const recentLosses = this.losses.slice(-this.period);
+
+            this.avgGain = recentGains.reduce((sum, gain) => sum + gain, 0) / this.period;
+            this.avgLoss = recentLosses.reduce((sum, loss) => sum + loss, 0) / this.period;
+        } else {
+            // Média móvel suavizada (EMA)
+            const alpha = 1 / this.period;
+            this.avgGain = (this.avgGain * (this.period - 1) + this.gains[this.gains.length - 1]) / this.period;
+            this.avgLoss = (this.avgLoss * (this.period - 1) + this.losses[this.losses.length - 1]) / this.period;
+        }
+
+        // Calcular RS e RSI
+        const rs = this.avgLoss === 0 ? 100 : this.avgGain / this.avgLoss;
+        const rsi = 100 - (100 / (1 + rs));
+
+        this.rsiValues.push(rsi);
+
+        // Manter apenas os últimos 100 valores
+        if (this.rsiValues.length > 100) {
+            this.rsiValues.shift();
+        }
+    }
+
+    getCurrentRSI() {
+        return this.rsiValues.length > 0 ? this.rsiValues[this.rsiValues.length - 1] : null;
+    }
+
+    getRSILevel() {
+        const rsi = this.getCurrentRSI();
+        if (!rsi) return 'INDEFINIDO';
+
+        if (rsi >= 70) return 'SOBRECOMPRADO';
+        if (rsi <= 30) return 'SOBREVENDIDO';
+        return 'NEUTRO';
+    }
+
+    getRSIHistory() {
+        return [...this.rsiValues];
+    }
+
+    reset() {
+        this.prices = [];
+        this.gains = [];
+        this.losses = [];
+        this.avgGain = 0;
+        this.avgLoss = 0;
+        this.rsiValues = [];
+    }
+}
+
 // Função utilitária para formatar números
 export const formatPrice = (price, decimals = 2) => {
     return price.toLocaleString('pt-BR', {

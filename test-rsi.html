@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste RSI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #0d1421;
+            color: white;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            background: #1e2329;
+        }
+        .success { border-left: 4px solid #0ecb81; }
+        .error { border-left: 4px solid #f6465d; }
+        .info { border-left: 4px solid #f0b90b; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>📊 Teste do Indicador RSI</h1>
+        <div id="test-results"></div>
+        <button onclick="runTests()">Executar Testes</button>
+    </div>
+
+    <script type="module">
+        import { RSICalculator } from './src/js/utils.js';
+
+        function addResult(message, type = 'info') {
+            const resultsDiv = document.getElementById('test-results');
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.textContent = message;
+            resultsDiv.appendChild(div);
+        }
+
+        window.runTests = function() {
+            document.getElementById('test-results').innerHTML = '';
+            
+            try {
+                addResult('🚀 Iniciando testes do RSI...', 'info');
+                
+                // Teste 1: Criação do RSI Calculator
+                const rsi = new RSICalculator(14);
+                addResult('✅ RSI Calculator criado com sucesso', 'success');
+                
+                // Teste 2: Adicionar preços simulados
+                const testPrices = [
+                    44.30, 44.10, 44.15, 43.61, 44.33, 44.83, 45.85, 46.08, 45.89, 46.03,
+                    46.83, 47.69, 46.49, 46.26, 47.09, 46.66, 46.80, 46.13, 45.81, 46.10
+                ];
+                
+                let rsiValue = null;
+                testPrices.forEach((price, index) => {
+                    rsiValue = rsi.addPrice(price);
+                    if (index >= 13) { // RSI só é calculado após o período
+                        addResult(`📈 Preço: $${price.toFixed(2)} | RSI: ${rsiValue ? rsiValue.toFixed(2) : 'N/A'}`, 'info');
+                    }
+                });
+                
+                // Teste 3: Verificar se o RSI está no range correto
+                if (rsiValue !== null && rsiValue >= 0 && rsiValue <= 100) {
+                    addResult(`✅ RSI final: ${rsiValue.toFixed(2)} (válido)`, 'success');
+                } else {
+                    addResult(`❌ RSI inválido: ${rsiValue}`, 'error');
+                }
+                
+                // Teste 4: Verificar níveis do RSI
+                const level = rsi.getRSILevel();
+                addResult(`📊 Nível do RSI: ${level}`, 'info');
+                
+                // Teste 5: Histórico do RSI
+                const history = rsi.getRSIHistory();
+                addResult(`📈 Histórico RSI: ${history.length} valores`, 'info');
+                
+                addResult('🎉 Todos os testes concluídos!', 'success');
+                
+            } catch (error) {
+                addResult(`❌ Erro nos testes: ${error.message}`, 'error');
+                console.error('Erro detalhado:', error);
+            }
+        };
+
+        // Executar testes automaticamente
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                runTests();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

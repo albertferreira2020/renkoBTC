@@ -6,12 +6,14 @@ Um gráfico Renko interativo que se conecta à API da Binance via WebSocket para
 
 - **Tempo Real**: Conecta-se diretamente à API da Binance via WebSocket
 - **Gráfico Renko**: Blocos baseados apenas em variação de preço (não tempo)
+- **Indicador RSI**: Análise de momentum em tempo real com níveis de sobrecompra/sobrevenda
 - **Visual Moderno**: Interface dark mode com design profissional
-- **Configurável**: Tamanho de bloco ajustável em tempo real
-- **Estatísticas**: Contador de blocos verdes/vermelhos e direção
+- **Configurável**: Tamanho de bloco e período RSI ajustáveis em tempo real
+- **Estatísticas**: Contador de blocos verdes/vermelhos, direção e RSI
 - **Responsivo**: Adapta-se a diferentes tamanhos de tela
 - **Order Book Integration**: Análise de liquidez em tempo real
 - **Supabase Integration**: Persistência de dados
+- **Indicador RSI**: Análise de momentum com RSI configurável (5-50 períodos)
 
 ## 🏗️ Estrutura do Projeto
 
@@ -60,7 +62,9 @@ npm start
 
 ### Configurações Disponíveis:
 - **Tamanho do Bloco**: Define a variação de preço necessária para criar um novo bloco (padrão: $10)
+- **RSI Período**: Configura o período de cálculo do RSI (padrão: 14)
 - **Zoom**: Controla quantos blocos são visíveis na tela
+- **RSI Período**: Configura o período do indicador RSI (padrão: 14, range: 5-50)
 
 ## 📈 Como Funciona o Gráfico Renko
 
@@ -68,6 +72,18 @@ npm start
 - **Bloco Verde**: Criado quando o preço sobe $X (tamanho do bloco) em relação ao último bloco
 - **Bloco Vermelho**: Criado quando o preço desce $X em relação ao último bloco
 - **Sem Tempo**: Os blocos são criados apenas com base na variação de preço, não no tempo
+
+## 📊 Indicador RSI (Relative Strength Index)
+
+### Como Funciona:
+- **RSI > 70**: **SOBRECOMPRADO** (possível reversão para baixo)
+- **RSI < 30**: **SOBREVENDIDO** (possível reversão para cima)
+- **30 ≤ RSI ≤ 70**: **NEUTRO** (tendência pode continuar)
+
+### Integração com Renko:
+- Combinação poderosa para identificar pontos de entrada/saída
+- RSI confirma sinais dos blocos Renko
+- Atualização em tempo real a cada novo preço
 
 ## 🗄️ Integração com Banco de Dados
 
@@ -88,10 +104,12 @@ O projeto inclui integração completa com Supabase para persistência de dados:
 
 Consulte a pasta `docs/` para documentação detalhada:
 
+- **[RSI Indicator](docs/RSI_INDICATOR.md)**: Guia completo do indicador RSI
 - **[Implementação](docs/IMPLEMENTATION_SUMMARY.md)**: Resumo da implementação
 - **[Order Book](docs/ORDER_BOOK_INTEGRATION.md)**: Integração do order book
 - **[Supabase](docs/SUPABASE_INTEGRATION.md)**: Configuração do banco
 - **[Segurança](docs/SECURITY.md)**: Considerações de segurança
+- **[RSI](docs/RSI_INDICATOR.md)**: Indicador RSI e análise de momentum
 
 ## 🛠️ Desenvolvimento
 
