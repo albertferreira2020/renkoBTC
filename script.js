@@ -5,6 +5,7 @@ class RenkoChart {
     constructor() {
         this.chart = null;
         this.candlestickSeries = null;
+        this.reversalMarkers = []; // Array para armazenar marcadores
         this.ws = null;
         this.currentPrice = 0;
         this.blockSize = 10; // Aumentar para $10 para melhor visualização
@@ -24,16 +25,32 @@ class RenkoChart {
         this.supabaseUrl = null;
         this.supabaseKey = null;
 
-        this.init();
-    }
+        // Order Book WebSocket e dados - sempre habilitado por padrão
+        this.orderBookWs = null;
+        this.currentOrderBook = null;
+        this.orderBookEnabled = true; // Sempre habilitado, sem controles de UI
+        this.lastOrderBookUpdate = 0;
+        this.orderBookStats = {
+            spread: 0,
+            spreadPercentage: 0,
+            bidLiquidity: 0,
+            askLiquidity: 0,
+            totalLiquidity: 0,
+            imbalance: 0,
+            lastUpdate: null
+        };
 
-    init() {
+        this.init();
+    } init() {
         // Aguardar um pouco para garantir que o CSS foi aplicado
         setTimeout(() => {
             this.loadConfig();
             this.createChart();
             this.setupEventListeners();
             this.connectWebSocket();
+
+            // Conectar order book automaticamente (sempre habilitado)
+            this.connectOrderBookWebSocket();
         }, 100);
     }
 
@@ -142,6 +159,8 @@ class RenkoChart {
                     high: isGreen ? parseFloat(record.close) : parseFloat(record.open),
                     low: isGreen ? parseFloat(record.open) : parseFloat(record.close),
                     close: parseFloat(record.close),
+                    volume: record.volume ? parseFloat(record.volume) : 0,
+                    reversal: record.reversal || null, // Incluir dados de reversão históricos
                     isGreen: isGreen
                 };
             });
@@ -165,6 +184,13 @@ class RenkoChart {
             // Atualizar gráfico
             this.updateChart();
             this.updateStats();
+
+            // Debug: verificar se há reversões nos dados históricos
+            const historicalReversals = this.renkoBlocks.filter(block => block.reversal !== null);
+            console.log(`🔍 Reversões encontradas nos dados históricos: ${historicalReversals.length}`);
+            if (historicalReversals.length > 0) {
+                console.log('📋 Primeiras reversões:', historicalReversals.slice(0, 3));
+            }
 
             console.log(`✅ Gráfico populado com ${chartData.length} blocos históricos`);
             console.log(`🎯 Último preço: $${this.lastBlockPrice}, Direção: ${this.lastBlockDirection}`);
@@ -420,6 +446,48 @@ class RenkoChart {
         };
     }
 
+    connectOrderBookWebSocket() {
+        // Usar depth10@1000ms para equilibrar dados vs performance
+        const orderBookWsUrl = 'wss://stream.binance.com:9443/ws/btcusdt@depth10@1000ms';
+        console.log('📊 Conectando ao Order Book WebSocket...');
+
+        this.updateOrderBookStatus('Conectando...', true);
+
+        this.orderBookWs = new WebSocket(orderBookWsUrl);
+
+        this.orderBookWs.onopen = () => {
+            console.log('📊 Order Book WebSocket conectado');
+            this.updateOrderBookStatus('Conectado', true);
+        };
+
+        this.orderBookWs.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                this.processOrderBookData(data);
+            } catch (error) {
+                console.error('❌ Erro ao processar dados do order book:', error);
+            }
+        };
+
+        this.orderBookWs.onerror = (error) => {
+            console.error('❌ Erro no Order Book WebSocket:', error);
+            this.updateOrderBookStatus('Erro na conexão', false);
+        };
+
+        this.orderBookWs.onclose = () => {
+            console.log('📊 Order Book WebSocket desconectado');
+            this.updateOrderBookStatus('Desconectado', false);
+
+            if (this.orderBookEnabled) {
+                // Reconectar após 5 segundos
+                setTimeout(() => {
+                    console.log('📊 Tentando reconectar Order Book...');
+                    this.connectOrderBookWebSocket();
+                }, 5000);
+            }
+        };
+    }
+
     processTradeData(tradeData) {
         const price = parseFloat(tradeData.p);
         const quantity = parseFloat(tradeData.q); // Volume da transação
@@ -554,6 +622,11 @@ class RenkoChart {
 
         this.renkoBlocks.push(block);
 
+        // Adicionar marcador de reversão se necessário
+        if (reversal !== null) {
+            this.addReversalMarker(block);
+        }
+
         // Registrar bloco no Supabase
         this.registerBlockInSupabase(block);
 
@@ -566,6 +639,86 @@ class RenkoChart {
             this.stats.redBlocks++;
             this.stats.lastDirection = 'BAIXA';
         }
+    } addReversalMarker(block) {
+        if (!this.candlestickSeries) {
+            console.warn('⚠️ Série principal não inicializada');
+            return;
+        }
+
+        if (block.reversal === 1) {
+            // Reversão de alta - marcador verde acima do bloco
+            console.log(`📍 Adicionando marcador de reversão ALTA em $${block.close.toFixed(2)}`);
+            this.reversalMarkers.push({
+                time: block.time,
+                position: 'aboveBar',
+                color: '#0ecb81',
+                shape: 'arrowUp',
+                text: '⬆',
+                size: 2
+            });
+        } else if (block.reversal === -1) {
+            // Reversão de baixa - marcador vermelho abaixo do bloco
+            console.log(`📍 Adicionando marcador de reversão BAIXA em $${block.close.toFixed(2)}`);
+            this.reversalMarkers.push({
+                time: block.time,
+                position: 'belowBar',
+                color: '#f6465d',
+                shape: 'arrowDown',
+                text: '⬇',
+                size: 2
+            });
+        }
+
+        // Aplicar todos os marcadores à série principal
+        this.updateAllMarkers();
+    }
+
+    updateAllMarkers() {
+        if (!this.candlestickSeries) {
+            console.warn('⚠️ Série principal não disponível para marcadores');
+            return;
+        }
+
+        try {
+            console.log(`🔍 Aplicando ${this.reversalMarkers.length} marcadores:`, this.reversalMarkers);
+
+            // Aplicar todos os marcadores de uma vez
+            this.candlestickSeries.setMarkers(this.reversalMarkers);
+            console.log(`✅ ${this.reversalMarkers.length} marcadores aplicados com sucesso`);
+        } catch (error) {
+            console.error('❌ Erro ao aplicar marcadores:', error);
+            console.log('Dados dos marcadores:', this.reversalMarkers);
+        }
+    }
+
+    updateReversalMarkers() {
+        // Reconstruir array de marcadores baseado nos blocos
+        this.reversalMarkers = [];
+
+        this.renkoBlocks.forEach(block => {
+            if (block.reversal === 1) {
+                this.reversalMarkers.push({
+                    time: block.time,
+                    position: 'aboveBar',
+                    color: '#0ecb81',
+                    shape: 'arrowUp',
+                    text: '⬆',
+                    size: 2
+                });
+            } else if (block.reversal === -1) {
+                this.reversalMarkers.push({
+                    time: block.time,
+                    position: 'belowBar',
+                    color: '#f6465d',
+                    shape: 'arrowDown',
+                    text: '⬇',
+                    size: 2
+                });
+            }
+        });
+
+        // Aplicar marcadores à série principal
+        this.updateAllMarkers();
     }
 
     async registerBlockInSupabase(block) {
@@ -582,7 +735,7 @@ class RenkoChart {
                 return;
             }
 
-            // Primeiro tentar com todos os campos
+            // Primeiro tentar com todos os campos incluindo order book
             let renkoData = {
                 created_at: new Date().toISOString(),
                 open: block.open,
@@ -593,7 +746,27 @@ class RenkoChart {
                 reversal: block.reversal // Incluir campo reversal
             };
 
-            console.log('💾 Salvando bloco Renko no banco de dados:', renkoData);
+            // Adicionar dados do order book se disponíveis
+            if (this.orderBookStats && this.orderBookStats.lastUpdate) {
+                renkoData = {
+                    ...renkoData,
+                    // Campos do order book - garantir valores numéricos sem aspas
+                    best_bid_price: Number(this.orderBookStats.bestBidPrice) || null,
+                    best_bid_quantity: Number(this.orderBookStats.bestBidQuantity) || null,
+                    best_ask_price: Number(this.orderBookStats.bestAskPrice) || null,
+                    best_ask_quantity: Number(this.orderBookStats.bestAskQuantity) || null,
+                    spread: Number(this.orderBookStats.spread) || null,
+                    spread_percentage: Number(this.orderBookStats.spreadPercentage) || null,
+                    bid_liquidity: Number(this.orderBookStats.bidLiquidity) || null,
+                    ask_liquidity: Number(this.orderBookStats.askLiquidity) || null,
+                    total_liquidity: Number(this.orderBookStats.totalLiquidity) || null,
+                    imbalance: Number(this.orderBookStats.imbalance) || null,
+                    weighted_mid_price: Number(this.orderBookStats.weightedMidPrice) || null
+                };
+                console.log('📊 Incluindo dados do order book no registro (como números, sem aspas)');
+            }
+
+            console.log('�💾 Salvando bloco Renko com order book no banco de dados:', renkoData);
 
             const response = await fetch(`${this.supabaseUrl}/botbinance`, {
                 method: 'POST',
@@ -609,16 +782,18 @@ class RenkoChart {
             if (!response.ok) {
                 const errorText = await response.text();
 
-                // Se erro for sobre campos inexistentes, tentar sem high/low
-                if (errorText.includes('high') || errorText.includes('low')) {
-                    console.warn('⚠️ Campos high/low não existem, tentando sem eles...');
+                // Se erro for sobre campos inexistentes, tentar com campos básicos
+                if (errorText.includes('high') || errorText.includes('low') ||
+                    errorText.includes('best_bid') || errorText.includes('spread') ||
+                    errorText.includes('liquidity') || errorText.includes('imbalance')) {
+                    console.warn('⚠️ Alguns campos não existem, tentando apenas com campos básicos...');
 
                     renkoData = {
                         created_at: new Date().toISOString(),
                         open: block.open,
                         close: block.close,
                         volume: block.volume || 0,
-                        reversal: block.reversal // Manter reversal no fallback
+                        reversal: block.reversal // Manter reversal no fallback básico
                     };
 
                     const fallbackResponse = await fetch(`${this.supabaseUrl}/botbinance`, {
@@ -635,7 +810,7 @@ class RenkoChart {
                     if (!fallbackResponse.ok) {
                         const fallbackErrorText = await fallbackResponse.text();
 
-                        // Se ainda falhar e for sobre reversal, tentar sem reversal
+                        // Se ainda falhar e for sobre reversal, tentar sem ele
                         if (fallbackErrorText.includes('reversal')) {
                             console.warn('⚠️ Campo reversal não existe, tentando sem ele...');
 
@@ -662,15 +837,15 @@ class RenkoChart {
                                 throw new Error(`Erro HTTP ${finalFallbackResponse.status}: ${finalErrorText}`);
                             }
 
-                            console.log('✅ Bloco Renko salvo no banco (sem high/low/reversal)');
+                            console.log('✅ Bloco Renko salvo no banco (apenas campos básicos)');
                         } else {
                             throw new Error(`Erro HTTP ${fallbackResponse.status}: ${fallbackErrorText}`);
                         }
                     } else {
-                        console.log('✅ Bloco Renko salvo no banco (sem high/low, com reversal)');
+                        console.log('✅ Bloco Renko salvo no banco (campos básicos + reversal)');
                     }
                 } else if (errorText.includes('reversal')) {
-                    // Se erro for especificamente sobre reversal, tentar sem ele
+                    // Se erro for especificamente sobre reversal, tentar sem ele mas com order book
                     console.warn('⚠️ Campo reversal não existe, tentando sem ele...');
 
                     renkoData = {
@@ -681,6 +856,24 @@ class RenkoChart {
                         low: block.low,
                         volume: block.volume || 0
                     };
+
+                    // Incluir order book se disponível
+                    if (this.orderBookStats && this.orderBookStats.lastUpdate) {
+                        renkoData = {
+                            ...renkoData,
+                            best_bid_price: Number(this.orderBookStats.bestBidPrice) || null,
+                            best_bid_quantity: Number(this.orderBookStats.bestBidQuantity) || null,
+                            best_ask_price: Number(this.orderBookStats.bestAskPrice) || null,
+                            best_ask_quantity: Number(this.orderBookStats.bestAskQuantity) || null,
+                            spread: Number(this.orderBookStats.spread) || null,
+                            spread_percentage: Number(this.orderBookStats.spreadPercentage) || null,
+                            bid_liquidity: Number(this.orderBookStats.bidLiquidity) || null,
+                            ask_liquidity: Number(this.orderBookStats.askLiquidity) || null,
+                            total_liquidity: Number(this.orderBookStats.totalLiquidity) || null,
+                            imbalance: Number(this.orderBookStats.imbalance) || null,
+                            weighted_mid_price: Number(this.orderBookStats.weightedMidPrice) || null
+                        };
+                    }
 
                     const reversalFallbackResponse = await fetch(`${this.supabaseUrl}/botbinance`, {
                         method: 'POST',
@@ -748,6 +941,9 @@ class RenkoChart {
         if (this.candlestickSeries && this.renkoBlocks.length > 0) {
             console.log('📋 Dados dos blocos:', this.renkoBlocks);
             this.candlestickSeries.setData(this.renkoBlocks);
+
+            // Atualizar marcadores de reversão
+            this.updateReversalMarkers();
 
             // Auto-scroll para o último bloco
             this.chart.timeScale().scrollToRealTime();
@@ -854,6 +1050,135 @@ class RenkoChart {
 
         this.updateStats();
     }
+
+    // Método para testar marcadores (apenas para debug)
+    addTestReversalMarkers() {
+        if (this.renkoBlocks.length < 3) {
+            console.log('🧪 Não há blocos suficientes para teste de marcadores');
+            return;
+        }
+
+        // Adicionar marcadores de teste aos últimos blocos
+        const testBlocks = this.renkoBlocks.slice(-3);
+
+        // Simular uma reversão de alta no penúltimo bloco
+        if (testBlocks.length >= 2) {
+            testBlocks[testBlocks.length - 2].reversal = 1;
+            console.log('🧪 Adicionado marcador de teste: REVERSÃO ALTA');
+        }
+
+        // Simular uma reversão de baixa no último bloco
+        if (testBlocks.length >= 1) {
+            testBlocks[testBlocks.length - 1].reversal = -1;
+            console.log('🧪 Adicionado marcador de teste: REVERSÃO BAIXA');
+        }
+
+        // Atualizar marcadores
+        this.updateReversalMarkers();
+        console.log('🧪 Marcadores de teste aplicados! Verifique o gráfico.');
+    }
+
+    processOrderBookData(orderBookData) {
+        if (!orderBookData.bids || !orderBookData.asks) {
+            console.warn('⚠️ Dados de order book inválidos');
+            return;
+        }
+
+        this.currentOrderBook = orderBookData;
+        this.lastOrderBookUpdate = Date.now();
+
+        // Calcular métricas do order book
+        const metrics = this.calculateOrderBookMetrics(orderBookData);
+        this.orderBookStats = {
+            ...metrics,
+            lastUpdate: new Date().toISOString()
+        };
+
+        console.log(`📊 Order Book atualizado: Spread: ${metrics.spreadPercentage.toFixed(4)}%, Imbalance: ${metrics.imbalance.toFixed(4)}, Liquidez: $${metrics.totalLiquidity.toFixed(0)}`);
+
+        // Atualizar UI
+        this.updateOrderBookDisplay();
+    }
+
+    calculateOrderBookMetrics(orderBookData) {
+        const bids = orderBookData.bids.map(bid => ({
+            price: parseFloat(bid[0]),
+            quantity: parseFloat(bid[1])
+        }));
+
+        const asks = orderBookData.asks.map(ask => ({
+            price: parseFloat(ask[0]),
+            quantity: parseFloat(ask[1])
+        }));
+
+        // Melhores preços
+        const bestBid = bids[0];
+        const bestAsk = asks[0];
+
+        // Spread
+        const spread = bestAsk.price - bestBid.price;
+        const midPrice = (bestBid.price + bestAsk.price) / 2;
+        const spreadPercentage = (spread / midPrice) * 100;
+
+        // Liquidez agregada (top 10 níveis)
+        const bidLiquidity = bids.reduce((sum, bid) => sum + (bid.price * bid.quantity), 0);
+        const askLiquidity = asks.reduce((sum, ask) => sum + (ask.price * ask.quantity), 0);
+        const totalLiquidity = bidLiquidity + askLiquidity;
+
+        // Imbalance (-1 a +1, onde +1 = mais bids, -1 = mais asks)
+        const imbalance = (bidLiquidity - askLiquidity) / totalLiquidity;
+
+        // Preço médio ponderado
+        const weightedMidPrice = (bestBid.price * bestAsk.quantity + bestAsk.price * bestBid.quantity) /
+            (bestBid.quantity + bestAsk.quantity);
+
+        return {
+            lastUpdateId: orderBookData.lastUpdateId,
+            bestBidPrice: bestBid.price,
+            bestBidQuantity: bestBid.quantity,
+            bestAskPrice: bestAsk.price,
+            bestAskQuantity: bestAsk.quantity,
+            spread: spread,
+            spreadPercentage: spreadPercentage,
+            bidLiquidity: bidLiquidity,
+            askLiquidity: askLiquidity,
+            totalLiquidity: totalLiquidity,
+            imbalance: imbalance,
+            weightedMidPrice: weightedMidPrice,
+            midPrice: midPrice
+        };
+    }
+
+    updateOrderBookStatus(status, isSuccess = true) {
+        const statusElement = document.getElementById('orderBookStatus');
+        if (statusElement) {
+            statusElement.innerHTML = status;
+            statusElement.className = isSuccess ? 'order-book-status success' : 'order-book-status error';
+        }
+    }
+
+    updateOrderBookDisplay() {
+        if (!this.orderBookStats.lastUpdate) return;
+
+        // Atualizar elementos da UI se existirem
+        const spreadElement = document.getElementById('spreadDisplay');
+        if (spreadElement) {
+            spreadElement.innerHTML = `Spread: ${this.orderBookStats.spreadPercentage.toFixed(4)}%`;
+        }
+
+        const liquidityElement = document.getElementById('liquidityDisplay');
+        if (liquidityElement) {
+            liquidityElement.innerHTML = `Liquidez: $${this.orderBookStats.totalLiquidity.toFixed(0)}`;
+        }
+
+        const imbalanceElement = document.getElementById('imbalanceDisplay');
+        if (imbalanceElement) {
+            const imbalanceText = this.orderBookStats.imbalance > 0 ?
+                `Mais Bids (+${(this.orderBookStats.imbalance * 100).toFixed(2)}%)` :
+                `Mais Asks (${(this.orderBookStats.imbalance * 100).toFixed(2)}%)`;
+            imbalanceElement.innerHTML = `Imbalance: ${imbalanceText}`;
+        }
+    }
 }
 
 // Inicializar a aplicação quando o DOM estiver pronto
@@ -888,10 +1213,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initializeApp() {
-    const renkoChart = new RenkoChart();
-
-    // Expor para debug global (opcional)
-    window.renkoChart = renkoChart;
+    // Expor instância globalmente para controles da UI
+    window.renkoChart = new RenkoChart();
 
     console.log('🚀 Gráfico Renko BTC/USDT iniciado!');
     console.log('📊 Conectando à API da Binance...');
