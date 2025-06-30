@@ -1130,18 +1130,18 @@ class RenkoChart {
 
         return {
             lastUpdateId: orderBookData.lastUpdateId,
-            bestBidPrice: bestBid.price,
-            bestBidQuantity: bestBid.quantity,
-            bestAskPrice: bestAsk.price,
-            bestAskQuantity: bestAsk.quantity,
-            spread: spread,
-            spreadPercentage: spreadPercentage,
-            bidLiquidity: bidLiquidity,
-            askLiquidity: askLiquidity,
-            totalLiquidity: totalLiquidity,
-            imbalance: imbalance,
-            weightedMidPrice: weightedMidPrice,
-            midPrice: midPrice
+            bestBidPrice: Math.round(bestBid.price * 100) / 100,
+            bestBidQuantity: Math.round(bestBid.quantity * 100) / 100,
+            bestAskPrice: Math.round(bestAsk.price * 100) / 100,
+            bestAskQuantity: Math.round(bestAsk.quantity * 100) / 100,
+            spread: Math.round(spread * 100) / 100,
+            spreadPercentage: Math.round(spreadPercentage * 100) / 100,
+            bidLiquidity: Math.round(bidLiquidity * 100) / 100,
+            askLiquidity: Math.round(askLiquidity * 100) / 100,
+            totalLiquidity: Math.round(totalLiquidity * 100) / 100,
+            imbalance: Math.round(imbalance * 10000) / 10000, // 4 casas para imbalance (valor pequeno)
+            weightedMidPrice: Math.round(weightedMidPrice * 100) / 100,
+            midPrice: Math.round(midPrice * 100) / 100
         };
     }
 
@@ -1159,12 +1159,12 @@ class RenkoChart {
         // Atualizar elementos da UI se existirem
         const spreadElement = document.getElementById('spreadDisplay');
         if (spreadElement) {
-            spreadElement.innerHTML = `Spread: ${this.orderBookStats.spreadPercentage.toFixed(4)}%`;
+            spreadElement.innerHTML = `Spread: ${this.orderBookStats.spreadPercentage.toFixed(2)}%`;
         }
 
         const liquidityElement = document.getElementById('liquidityDisplay');
         if (liquidityElement) {
-            liquidityElement.innerHTML = `Liquidez: $${this.orderBookStats.totalLiquidity.toFixed(0)}`;
+            liquidityElement.innerHTML = `Liquidez: $${this.orderBookStats.totalLiquidity.toFixed(2)}`;
         }
 
         const imbalanceElement = document.getElementById('imbalanceDisplay');
