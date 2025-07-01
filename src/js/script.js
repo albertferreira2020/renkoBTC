@@ -927,18 +927,18 @@ class RenkoChart {
             if (this.orderBookStats && this.orderBookStats.lastUpdate) {
                 renkoData = {
                     ...renkoData,
-                    // Campos do order book - garantir valores numéricos sem aspas
-                    best_bid_price: Number(this.orderBookStats.bestBidPrice) || null,
-                    best_bid_quantity: Number(this.orderBookStats.bestBidQuantity) || null,
-                    best_ask_price: Number(this.orderBookStats.bestAskPrice) || null,
-                    best_ask_quantity: Number(this.orderBookStats.bestAskQuantity) || null,
-                    spread: Number(this.orderBookStats.spread) || null,
-                    spread_percentage: Number(this.orderBookStats.spreadPercentage) || null,
-                    bid_liquidity: Number(this.orderBookStats.bidLiquidity) || null,
-                    ask_liquidity: Number(this.orderBookStats.askLiquidity) || null,
-                    total_liquidity: Number(this.orderBookStats.totalLiquidity) || null,
-                    imbalance: Number(this.orderBookStats.imbalance) || null,
-                    weighted_mid_price: Number(this.orderBookStats.weightedMidPrice) || null
+                    // Campos do order book - garantir valores numéricos, null vira 0
+                    best_bid_price: Number(this.orderBookStats.bestBidPrice) || 0,
+                    best_bid_quantity: Number(this.orderBookStats.bestBidQuantity) || 0,
+                    best_ask_price: Number(this.orderBookStats.bestAskPrice) || 0,
+                    best_ask_quantity: Number(this.orderBookStats.bestAskQuantity) || 0,
+                    spread: Number(this.orderBookStats.spread) || 0,
+                    spread_percentage: Number(this.orderBookStats.spreadPercentage) || 0,
+                    bid_liquidity: Number(this.orderBookStats.bidLiquidity) || 0,
+                    ask_liquidity: Number(this.orderBookStats.askLiquidity) || 0,
+                    total_liquidity: Number(this.orderBookStats.totalLiquidity) || 0,
+                    imbalance: Number(this.orderBookStats.imbalance) || 0,
+                    weighted_mid_price: Number(this.orderBookStats.weightedMidPrice) || 0
                 };
                 console.log('📊 Incluindo dados do order book no registro (como números, sem aspas)');
             }
@@ -1038,17 +1038,17 @@ class RenkoChart {
                     if (this.orderBookStats && this.orderBookStats.lastUpdate) {
                         renkoData = {
                             ...renkoData,
-                            best_bid_price: Number(this.orderBookStats.bestBidPrice) || null,
-                            best_bid_quantity: Number(this.orderBookStats.bestBidQuantity) || null,
-                            best_ask_price: Number(this.orderBookStats.bestAskPrice) || null,
-                            best_ask_quantity: Number(this.orderBookStats.bestAskQuantity) || null,
-                            spread: Number(this.orderBookStats.spread) || null,
-                            spread_percentage: Number(this.orderBookStats.spreadPercentage) || null,
-                            bid_liquidity: Number(this.orderBookStats.bidLiquidity) || null,
-                            ask_liquidity: Number(this.orderBookStats.askLiquidity) || null,
-                            total_liquidity: Number(this.orderBookStats.totalLiquidity) || null,
-                            imbalance: Number(this.orderBookStats.imbalance) || null,
-                            weighted_mid_price: Number(this.orderBookStats.weightedMidPrice) || null
+                            best_bid_price: Number(this.orderBookStats.bestBidPrice) || 0,
+                            best_bid_quantity: Number(this.orderBookStats.bestBidQuantity) || 0,
+                            best_ask_price: Number(this.orderBookStats.bestAskPrice) || 0,
+                            best_ask_quantity: Number(this.orderBookStats.bestAskQuantity) || 0,
+                            spread: Number(this.orderBookStats.spread) || 0,
+                            spread_percentage: Number(this.orderBookStats.spreadPercentage) || 0,
+                            bid_liquidity: Number(this.orderBookStats.bidLiquidity) || 0,
+                            ask_liquidity: Number(this.orderBookStats.askLiquidity) || 0,
+                            total_liquidity: Number(this.orderBookStats.totalLiquidity) || 0,
+                            imbalance: Number(this.orderBookStats.imbalance) || 0,
+                            weighted_mid_price: Number(this.orderBookStats.weightedMidPrice) || 0
                         };
                     }
 
@@ -1249,6 +1249,132 @@ class RenkoChart {
             rsiStatusElement.textContent = '-';
             rsiValueElement.className = 'stat-value';
             rsiStatusElement.className = 'stat-value';
+        }
+    }
+
+    processOrderBookData(data) {
+        try {
+            if (!data || !data.bids || !data.asks) {
+                console.warn('❌ Dados do order book inválidos:', data);
+                return;
+            }
+
+            // Processar bids (ofertas de compra) e asks (ofertas de venda) - tratar valores null/NaN
+            const bids = data.bids.map(bid => ({
+                price: parseFloat(bid[0]) || 0,
+                quantity: parseFloat(bid[1]) || 0
+            }));
+            const asks = data.asks.map(ask => ({
+                price: parseFloat(ask[0]) || 0,
+                quantity: parseFloat(ask[1]) || 0
+            }));
+
+            if (bids.length === 0 || asks.length === 0) {
+                console.warn('❌ Order book vazio');
+                return;
+            }
+
+            // Melhor bid (maior preço de compra) e melhor ask (menor preço de venda)
+            const bestBid = bids[0] || { price: 0, quantity: 0 };
+            const bestAsk = asks[0] || { price: 0, quantity: 0 };
+
+            // Calcular spread - tratar divisão por zero
+            const spread = (bestAsk.price || 0) - (bestBid.price || 0);
+            const spreadPercentage = bestBid.price > 0 ? (spread / bestBid.price) * 100 : 0;
+
+            // Calcular liquidez (soma das quantidades nos primeiros níveis) - tratar valores null
+            const bidLiquidity = bids.slice(0, 5).reduce((sum, bid) => {
+                const price = bid.price || 0;
+                const quantity = bid.quantity || 0;
+                return sum + (price * quantity);
+            }, 0);
+            const askLiquidity = asks.slice(0, 5).reduce((sum, ask) => {
+                const price = ask.price || 0;
+                const quantity = ask.quantity || 0;
+                return sum + (price * quantity);
+            }, 0);
+            const totalLiquidity = (bidLiquidity || 0) + (askLiquidity || 0);
+
+            // Calcular imbalance (desequilíbrio entre bid/ask) - tratar divisão por zero
+            const imbalance = totalLiquidity > 0 ? ((bidLiquidity - askLiquidity) / totalLiquidity) * 100 : 0;
+
+            // Calcular preço médio ponderado - tratar divisão por zero
+            const totalQuantity = (bestBid.quantity || 0) + (bestAsk.quantity || 0);
+            const weightedMidPrice = totalQuantity > 0 ?
+                (((bestBid.price || 0) * (bestAsk.quantity || 0)) + ((bestAsk.price || 0) * (bestBid.quantity || 0))) / totalQuantity : 0;
+
+            // Atualizar estatísticas do order book com arredondamento para 2 casas decimais e tratamento de null
+            this.orderBookStats = {
+                bestBidPrice: Math.round((bestBid.price || 0) * 100) / 100,
+                bestBidQuantity: Math.round((bestBid.quantity || 0) * 100) / 100,
+                bestAskPrice: Math.round((bestAsk.price || 0) * 100) / 100,
+                bestAskQuantity: Math.round((bestAsk.quantity || 0) * 100) / 100,
+                spread: Math.round((spread || 0) * 100) / 100,
+                spreadPercentage: Math.round((spreadPercentage || 0) * 100) / 100,
+                bidLiquidity: Math.round((bidLiquidity || 0) * 100) / 100,
+                askLiquidity: Math.round((askLiquidity || 0) * 100) / 100,
+                totalLiquidity: Math.round((totalLiquidity || 0) * 100) / 100,
+                imbalance: Math.round((imbalance || 0) * 10000) / 10000, // 4 casas decimais para maior precisão
+                weightedMidPrice: Math.round((weightedMidPrice || 0) * 100) / 100,
+                lastUpdate: new Date()
+            };
+
+            this.currentOrderBook = { bids, asks };
+            this.lastOrderBookUpdate = Date.now();
+
+            // Atualizar UI
+            this.updateOrderBookDisplay();
+
+            console.log(`📊 Order Book atualizado - Spread: $${spread.toFixed(2)} (${spreadPercentage.toFixed(3)}%), Liquidez: $${totalLiquidity.toFixed(0)}`);
+
+        } catch (error) {
+            console.error('❌ Erro ao processar dados do order book:', error);
+        }
+    }
+
+    updateOrderBookStatus(status, isConnected) {
+        const statusElement = document.getElementById('orderBookStatus');
+        if (statusElement) {
+            statusElement.textContent = status;
+            statusElement.className = isConnected ? 'stat-value order-book-status success' : 'stat-value order-book-status error';
+        }
+    }
+
+    updateOrderBookDisplay() {
+        if (!this.orderBookStats || !this.orderBookStats.lastUpdate) {
+            return;
+        }
+
+        // Atualizar display do spread com 2 casas decimais - tratar null
+        const spreadElement = document.getElementById('spreadDisplay');
+        if (spreadElement) {
+            const spread = this.orderBookStats.spread || 0;
+            const spreadPercentage = this.orderBookStats.spreadPercentage || 0;
+            spreadElement.textContent = `$${spread.toFixed(2)} (${spreadPercentage.toFixed(2)}%)`;
+        }
+
+        // Atualizar display da liquidez com 2 casas decimais - tratar null
+        const liquidityElement = document.getElementById('liquidityDisplay');
+        if (liquidityElement) {
+            const totalLiquidity = this.orderBookStats.totalLiquidity || 0;
+            liquidityElement.textContent = `$${totalLiquidity.toFixed(2)}`;
+        }
+
+        // Atualizar display do imbalance - tratar null
+        const imbalanceElement = document.getElementById('imbalanceDisplay');
+        if (imbalanceElement) {
+            const imbalanceValue = this.orderBookStats.imbalance || 0;
+            const imbalanceText = `${imbalanceValue > 0 ? '+' : ''}${imbalanceValue.toFixed(1)}%`;
+            imbalanceElement.textContent = imbalanceText;
+
+            // Colorir baseado no imbalance
+            if (imbalanceValue > 5) {
+                imbalanceElement.style.color = '#0ecb81'; // Verde para mais bids
+            } else if (imbalanceValue < -5) {
+                imbalanceElement.style.color = '#f6465d'; // Vermelho para mais asks
+            } else {
+                imbalanceElement.style.color = '#ffffff'; // Neutro
+            }
         }
     }
 
