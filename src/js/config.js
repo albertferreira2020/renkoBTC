@@ -46,7 +46,7 @@ class Config {
     loadFromPrompt() {
         // Se não conseguir carregar do .env, pedir ao usuário
         if (!this.supabaseUrl) {
-            this.supabaseUrl = prompt('Digite a URL do Supabase:') || 'http://37.27.214.207:8097/rest/v1';
+            this.supabaseUrl = prompt('Digite a URL do Supabase:') || 'http://37.27.214.207:8063/rest/v1';
         }
         if (!this.supabaseKey) {
             this.supabaseKey = prompt('Digite a chave da API do Supabase:') || '';
