@@ -2,14 +2,15 @@
   "name": "renko-btc-chart",
   "version": "1.0.0",
   "description": "Gráfico Renko em tempo real do BTC/USDT conectado à API da Binance",
-  "main": "src/js/script.js",
-  "type": "module",
+  "main": "server.js",
   "scripts": {
-    "start": "./scripts/start.sh",
-    "serve": "python3 -m http.server 8080",
-    "dev": "python3 -m http.server 8080",
-    "setup": "echo 'Configure .env file based on .env.example'",
-    "docs": "echo 'Check docs/ folder for documentation'"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "setup": "pnpm install",
+    "init-db": "node init-database.js",
+    "db:init": "node init-database.js",
+    "build": "echo 'Projeto frontend não requer build'",
+    "test": "echo 'Nenhum teste especificado'"
   },
   "keywords": [
     "bitcoin",
@@ -23,7 +24,11 @@
   "author": "Bitcoin Bot IA",
   "license": "MIT",
   "dependencies": {
-    "lightweight-charts": "^4.1.0"
+    "lightweight-charts": "^4.1.0",
+    "pg": "^8.11.3",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {},
   "repository": {
@@ -31,6 +36,7 @@
     "url": "local"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=14.0.0",
+    "pnpm": ">=7.0.0"
   }
 }

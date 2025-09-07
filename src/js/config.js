@@ -1,69 +1,40 @@
-// Configuração para carregar variáveis de ambiente
+// Configuração simplificada para banco PostgreSQL
 class Config {
     constructor() {
-        this.supabaseUrl = null;
-        this.supabaseKey = null;
-        this.loadConfig();
+        // Configuração direta do banco PostgreSQL
+        this.dbConfig = {
+            host: '37.27.214.207',
+            port: 5432,
+            database: 'btc',
+            user: 'postgres',
+            password: 'xxxx'
+        };
+
+        // URL base para API (se houver uma API REST disponível)
+        this.apiBaseUrl = null;
+        console.log('✅ Configuração do banco PostgreSQL carregada');
     }
 
     async loadConfig() {
-        try {
-            // Tentar carregar do arquivo .env
-            const response = await fetch('.env');
-            if (response.ok) {
-                const envText = await response.text();
-                this.parseEnvFile(envText);
-            } else {
-                // Fallback para variáveis de ambiente do navegador ou prompt
-                this.loadFromPrompt();
-            }
-        } catch (error) {
-            console.warn('Não foi possível carregar .env, usando prompt para configuração');
-            this.loadFromPrompt();
-        }
+        // Configuração já carregada no constructor
+        return Promise.resolve();
     }
 
-    parseEnvFile(envText) {
-        const lines = envText.split('\n');
-        for (const line of lines) {
-            if (line.trim() && !line.startsWith('#')) {
-                const [key, value] = line.split('=');
-                if (key && value) {
-                    switch (key.trim()) {
-                        case 'SUPABASE_URL':
-                            this.supabaseUrl = value.trim();
-                            break;
-                        case 'SUPABASE_KEY':
-                            this.supabaseKey = value.trim();
-                            break;
-                    }
-                }
-            }
-        }
-        console.log('✅ Configuração carregada do arquivo .env');
+    getDbConfig() {
+        return this.dbConfig;
     }
 
-    loadFromPrompt() {
-        // Se não conseguir carregar do .env, pedir ao usuário
-        if (!this.supabaseUrl) {
-            this.supabaseUrl = prompt('Digite a URL do Supabase:') || 'http://37.27.214.207:8063/rest/v1';
-        }
-        if (!this.supabaseKey) {
-            this.supabaseKey = prompt('Digite a chave da API do Supabase:') || '';
-        }
-        console.log('✅ Configuração carregada via prompt');
-    }
-
+    // Manter compatibilidade com código existente
     getSupabaseUrl() {
-        return this.supabaseUrl;
+        return this.apiBaseUrl;
     }
 
     getSupabaseKey() {
-        return this.supabaseKey;
+        return null; // Não usado mais
     }
 
     isConfigured() {
-        return this.supabaseUrl && this.supabaseKey;
+        return true; // Sempre configurado
     }
 }
 

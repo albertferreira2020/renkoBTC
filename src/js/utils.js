@@ -1,7 +1,7 @@
 // Utilitários e configurações adicionais para o gráfico Renko
 
 // Configurações predefinidas para diferentes timeframes de Renko
-export const RENKO_PRESETS = {
+const RENKO_PRESETS = {
     SCALPING: { blockSize: 5, name: 'Scalping ($5)' },
     INTRADAY: { blockSize: 10, name: 'Intraday ($10)' },
     SWING: { blockSize: 25, name: 'Swing ($25)' },
@@ -9,7 +9,7 @@ export const RENKO_PRESETS = {
 };
 
 // Pares de trading disponíveis na Binance
-export const TRADING_PAIRS = {
+const TRADING_PAIRS = {
     BTCUSDT: { symbol: 'btcusdt', name: 'Bitcoin/USDT', decimals: 2 },
     ETHUSDT: { symbol: 'ethusdt', name: 'Ethereum/USDT', decimals: 2 },
     BNBUSDT: { symbol: 'bnbusdt', name: 'BNB/USDT', decimals: 2 },
@@ -18,7 +18,7 @@ export const TRADING_PAIRS = {
 };
 
 // Temas de cores para o gráfico
-export const CHART_THEMES = {
+const CHART_THEMES = {
     DARK: {
         background: '#0d1421',
         textColor: '#d1d4dc',
@@ -43,7 +43,7 @@ export const CHART_THEMES = {
 };
 
 // Classe para gerenciar sons de notificação
-export class SoundManager {
+class SoundManager {
     constructor() {
         this.audioContext = null;
         this.sounds = new Map();
@@ -102,7 +102,7 @@ export class SoundManager {
 }
 
 // Classe para calcular indicadores técnicos adicionais
-export class TechnicalIndicators {
+class TechnicalIndicators {
     constructor() {
         this.priceHistory = [];
     }
@@ -157,7 +157,7 @@ export class TechnicalIndicators {
 }
 
 // Classe para persistir dados localmente
-export class DataPersistence {
+class DataPersistence {
     constructor() {
         this.storageKey = 'renko_chart_data';
     }
@@ -215,7 +215,7 @@ export class DataPersistence {
 }
 
 // Classe para calcular o indicador RSI (Relative Strength Index)
-export class RSICalculator {
+class RSICalculator {
     constructor(period = 14) {
         this.period = period;
         this.prices = [];
@@ -314,7 +314,7 @@ export class RSICalculator {
 }
 
 // Função utilitária para formatar números
-export const formatPrice = (price, decimals = 2) => {
+const formatPrice = (price, decimals = 2) => {
     return price.toLocaleString('pt-BR', {
         minimumFractionDigits: decimals,
         maximumFractionDigits: decimals
@@ -322,13 +322,13 @@ export const formatPrice = (price, decimals = 2) => {
 };
 
 // Função utilitária para formatar porcentagem
-export const formatPercentage = (value, decimals = 2) => {
+const formatPercentage = (value, decimals = 2) => {
     const sign = value >= 0 ? '+' : '';
     return `${sign}${value.toFixed(decimals)}%`;
 };
 
 // Função utilitária para calcular diferença de tempo
-export const formatTimeDifference = (timestamp) => {
+const formatTimeDifference = (timestamp) => {
     const now = Date.now();
     const diff = now - timestamp;
 
@@ -342,26 +342,25 @@ export const formatTimeDifference = (timestamp) => {
 };
 
 // Função para detectar dispositivo móvel
-export const isMobileDevice = () => {
+const isMobileDevice = () => {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 };
 
 // Função para validar conexão WebSocket
-export const isWebSocketSupported = () => {
+const isWebSocketSupported = () => {
     return 'WebSocket' in window && window.WebSocket.CLOSING === 2;
 };
 
-// Exportar todas as funcionalidades como default
-export default {
-    RENKO_PRESETS,
-    TRADING_PAIRS,
-    CHART_THEMES,
-    SoundManager,
-    TechnicalIndicators,
-    DataPersistence,
-    formatPrice,
-    formatPercentage,
-    formatTimeDifference,
-    isMobileDevice,
-    isWebSocketSupported
-};
+// Expor as classes e funções globalmente para uso no frontend
+window.RSICalculator = RSICalculator;
+window.RENKO_PRESETS = RENKO_PRESETS;
+window.TRADING_PAIRS = TRADING_PAIRS;
+window.CHART_THEMES = CHART_THEMES;
+window.SoundManager = SoundManager;
+window.TechnicalIndicators = TechnicalIndicators;
+window.DataPersistence = DataPersistence;
+window.formatPrice = formatPrice;
+window.formatPercentage = formatPercentage;
+window.formatTimeDifference = formatTimeDifference;
+window.isMobileDevice = isMobileDevice;
+window.isWebSocketSupported = isWebSocketSupported;

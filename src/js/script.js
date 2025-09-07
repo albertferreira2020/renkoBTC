@@ -1,8 +1,7 @@
 // Gráfico Renko em tempo real usando Lightweight Charts
 // A biblioteca já está carregada via script tag no HTML
 
-// Importar a classe RSI do utils.js
-import { RSICalculator } from './utils.js';
+// RSICalculator será carregado do utils.js via script tag
 
 class RenkoChart {
     constructor() {
@@ -27,9 +26,10 @@ class RenkoChart {
             lastDirection: null
         };
 
-        // Configuração do Supabase - será carregada do arquivo config
-        this.supabaseUrl = null;
-        this.supabaseKey = null;
+        // Configuração da API local - conecta ao PostgreSQL via servidor Node.js
+        this.apiBaseUrl = 'http://localhost:3000/api';
+        this.supabaseUrl = null; // Não usado mais
+        this.supabaseKey = null; // Não usado mais
 
         // Order Book WebSocket e dados - sempre habilitado por padrão
         this.orderBookWs = null;
@@ -46,8 +46,19 @@ class RenkoChart {
             lastUpdate: null
         };
 
-        // RSI
-        this.rsiCalculator = new RSICalculator(14); // Período padrão de 14
+        // RSI - inicializar com verificação de segurança
+        try {
+            if (typeof RSICalculator !== 'undefined') {
+                this.rsiCalculator = new RSICalculator(14); // Período padrão de 14
+                console.log('✅ RSICalculator inicializado com sucesso');
+            } else {
+                console.warn('⚠️ RSICalculator não está disponível');
+                this.rsiCalculator = null;
+            }
+        } catch (error) {
+            console.warn('❌ Erro ao inicializar RSICalculator:', error);
+            this.rsiCalculator = null;
+        }
         this.rsiPeriod = 14;
         this.rsiHistory = [];
 
@@ -69,43 +80,48 @@ class RenkoChart {
         // Aguardar configuração ser carregada
         if (window.appConfig) {
             await window.appConfig.loadConfig();
-            this.supabaseUrl = window.appConfig.getSupabaseUrl();
-            this.supabaseKey = window.appConfig.getSupabaseKey();
-            console.log('✅ Configuração do Supabase carregada');
+            console.log('✅ Configuração carregada - usando API local');
 
-            // Testar estrutura da tabela
-            await this.checkTableStructure();
+            // Testar conexão com a API local
+            await this.testApiConnection();
 
             // Carregar dados históricos após configuração
             await this.loadHistoricalData();
         }
     }
 
+    async testApiConnection() {
+        try {
+            console.log('🔍 Testando conexão com API local...');
+
+            const response = await fetch(`${this.apiBaseUrl}/health`);
+            const data = await response.json();
+
+            if (data.status === 'ok') {
+                console.log('✅ API local conectada com sucesso');
+                console.log('📊 Banco PostgreSQL:', data.database);
+            } else {
+                console.warn('⚠️ Problema na conexão:', data);
+            }
+        } catch (error) {
+            console.error('❌ Erro ao conectar com API local:', error);
+        }
+    }
+
     async checkTableStructure() {
         try {
-            if (!this.supabaseUrl || !this.supabaseKey) {
-                return;
-            }
-
             console.log('🔍 Verificando estrutura da tabela botbinance...');
 
-            // Fazer uma consulta simples para verificar os campos disponíveis
-            const response = await fetch(`${this.supabaseUrl}/botbinance?limit=1`, {
-                method: 'GET',
-                headers: {
-                    'apikey': this.supabaseKey,
-                    'Authorization': `Bearer ${this.supabaseKey}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+            const response = await fetch(`${this.apiBaseUrl}/table-structure`);
 
             if (response.ok) {
-                const data = await response.json();
-                if (data.length > 0) {
-                    console.log('📋 Campos disponíveis na tabela:', Object.keys(data[0]));
-                } else {
-                    console.log('📊 Tabela vazia, não é possível verificar estrutura');
-                }
+                const columns = await response.json();
+                console.log('📋 Estrutura da tabela:');
+                columns.forEach(col => {
+                    console.log(`  - ${col.column_name}: ${col.data_type} (${col.is_nullable})`);
+                });
+            } else {
+                console.warn('⚠️ Não foi possível verificar estrutura da tabela');
             }
 
         } catch (error) {
@@ -115,23 +131,10 @@ class RenkoChart {
 
     async loadHistoricalData() {
         try {
-            if (!this.supabaseUrl || !this.supabaseKey) {
-                console.warn('Configuração do Supabase não disponível para carregar dados históricos');
-                this.updateHistoricalStatus('❌ Config ausente', false);
-                return;
-            }
-
-            console.log('📥 Carregando dados históricos do Supabase...');
+            console.log('📥 Carregando dados históricos do PostgreSQL...');
             this.updateHistoricalStatus('📥 Carregando...');
 
-            const response = await fetch(`${this.supabaseUrl}/botbinance?order=created_at.asc&limit=1000`, {
-                method: 'GET',
-                headers: {
-                    'apikey': this.supabaseKey,
-                    'Authorization': `Bearer ${this.supabaseKey}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+            const response = await fetch(`${this.apiBaseUrl}/historical-data?limit=1000`);
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -215,12 +218,9 @@ class RenkoChart {
     }
 
     startPeriodicDataSync() {
-        // Sincronizar dados a cada 30 segundos para pegar novos registros
-        setInterval(async () => {
-            await this.syncNewData();
-        }, 30000); // 30 segundos
-
-        console.log('🔄 Sincronização periódica iniciada (30s)');
+        // Não é mais necessário sincronizar dados periódicos 
+        // pois novos dados são salvos em tempo real via API local
+        console.log('🔄 Sincronização em tempo real ativa via API local');
     }
 
     async syncNewData() {
@@ -554,9 +554,17 @@ class RenkoChart {
 
         rsiPeriodInput.addEventListener('change', (e) => {
             this.rsiPeriod = parseInt(e.target.value);
-            this.rsiCalculator = new RSICalculator(this.rsiPeriod);
+            try {
+                if (typeof RSICalculator !== 'undefined') {
+                    this.rsiCalculator = new RSICalculator(this.rsiPeriod);
+                    console.log(`📊 RSI período alterado para: ${this.rsiPeriod}`);
+                } else {
+                    console.warn('⚠️ RSICalculator não está disponível para alteração de período');
+                }
+            } catch (error) {
+                console.warn('❌ Erro ao alterar período do RSI:', error);
+            }
             this.updateRSIDisplay();
-            console.log(`📊 RSI período alterado para: ${this.rsiPeriod}`);
         });
     }
 
@@ -659,25 +667,41 @@ class RenkoChart {
     }
 
     processRenkoBlock(price, volume = 0) {
-        // Calcular RSI a cada novo preço
-        const rsiValue = this.rsiCalculator.addPrice(price);
-        this.updateRSIDisplay(rsiValue);
-
-        // Atualizar gráfico RSI se temos um valor válido
-        if (rsiValue !== null && this.rsiSeries) {
-            const currentTime = Date.now() / 1000;
-            this.rsiData.push({
-                time: currentTime,
-                value: rsiValue
-            });
-
-            // Manter apenas os últimos 500 pontos RSI
-            if (this.rsiData.length > 500) {
-                this.rsiData.shift();
+        // Calcular RSI a cada novo preço (com verificação de segurança)
+        let rsiValue = null;
+        if (this.rsiCalculator && typeof this.rsiCalculator.addPrice === 'function') {
+            try {
+                rsiValue = this.rsiCalculator.addPrice(price);
+                this.updateRSIDisplay(rsiValue);
+            } catch (error) {
+                console.warn('❌ Erro ao calcular RSI:', error);
+                rsiValue = null;
             }
+        }
 
-            this.rsiSeries.setData(this.rsiData);
-            console.log(`📈 RSI gráfico atualizado: ${rsiValue.toFixed(2)}`);
+        // Atualizar gráfico RSI se temos um valor válido e série disponível
+        if (rsiValue !== null && rsiValue !== undefined && this.rsiSeries) {
+            try {
+                const currentTime = Date.now() / 1000;
+
+                // Verificar se o valor é numérico válido
+                if (typeof rsiValue === 'number' && !isNaN(rsiValue) && isFinite(rsiValue)) {
+                    this.rsiData.push({
+                        time: currentTime,
+                        value: rsiValue
+                    });
+
+                    // Manter apenas os últimos 500 pontos RSI
+                    if (this.rsiData.length > 500) {
+                        this.rsiData.shift();
+                    }
+
+                    this.rsiSeries.setData(this.rsiData);
+                    console.log(`📈 RSI gráfico atualizado: ${rsiValue.toFixed(2)}`);
+                }
+            } catch (error) {
+                console.warn('❌ Erro ao atualizar gráfico RSI:', error);
+            }
         }
 
         // Acumular volume para o bloco atual
@@ -900,34 +924,27 @@ class RenkoChart {
 
     async registerBlockInSupabase(block) {
         try {
-            // Verificar se a configuração está disponível
-            if (!this.supabaseUrl || !this.supabaseKey) {
-                console.warn('Configuração do Supabase não encontrada, pulando salvamento');
-                return;
-            }
-
             // Validar se o bloco é válido
             if (!block || !block.open || !block.close) {
                 console.warn('Bloco inválido, não será registrado:', block);
                 return;
             }
 
-            // Primeiro tentar com todos os campos incluindo order book
+            // Preparar dados básicos para envio à API local
             let renkoData = {
-                created_at: new Date().toISOString(),
                 open: block.open,
                 close: block.close,
-                high: block.high,
-                low: block.low,
+                high: block.high || (block.isGreen ? block.close : block.open),
+                low: block.low || (block.isGreen ? block.open : block.close),
                 volume: block.volume || 0,
-                reversal: block.reversal // Incluir campo reversal
+                reversal: block.reversal || 0
             };
 
-            // Adicionar dados do order book se disponíveis
+            // Incluir dados do order book se disponíveis
             if (this.orderBookStats && this.orderBookStats.lastUpdate) {
+                console.log('📊 Dados do order book disponíveis:', this.orderBookStats);
                 renkoData = {
                     ...renkoData,
-                    // Campos do order book - garantir valores numéricos, null vira 0
                     best_bid_price: Number(this.orderBookStats.bestBidPrice) || 0,
                     best_bid_quantity: Number(this.orderBookStats.bestBidQuantity) || 0,
                     best_ask_price: Number(this.orderBookStats.bestAskPrice) || 0,
@@ -940,148 +957,39 @@ class RenkoChart {
                     imbalance: Number(this.orderBookStats.imbalance) || 0,
                     weighted_mid_price: Number(this.orderBookStats.weightedMidPrice) || 0
                 };
-                console.log('📊 Incluindo dados do order book no registro (como números, sem aspas)');
+                console.log('📊 Incluindo dados do order book no registro');
+            } else {
+                console.warn('⚠️ Dados do order book não disponíveis:', {
+                    orderBookStats: this.orderBookStats,
+                    hasLastUpdate: this.orderBookStats ? !!this.orderBookStats.lastUpdate : false
+                });
             }
 
-            console.log('�💾 Salvando bloco Renko com order book no banco de dados:', renkoData);
+            console.log('💾 Salvando bloco Renko no PostgreSQL:', renkoData);
 
-            const response = await fetch(`${this.supabaseUrl}/botbinance`, {
+            const response = await fetch(`${this.apiBaseUrl}/renko-data`, {
                 method: 'POST',
                 headers: {
-                    'apikey': this.supabaseKey,
-                    'Authorization': `Bearer ${this.supabaseKey}`,
-                    'Content-Type': 'application/json',
-                    'Prefer': 'return=minimal'
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(renkoData)
             });
 
             if (!response.ok) {
                 const errorText = await response.text();
-
-                // Se erro for sobre campos inexistentes, tentar com campos básicos
-                if (errorText.includes('high') || errorText.includes('low') ||
-                    errorText.includes('best_bid') || errorText.includes('spread') ||
-                    errorText.includes('liquidity') || errorText.includes('imbalance')) {
-                    console.warn('⚠️ Alguns campos não existem, tentando apenas com campos básicos...');
-
-                    renkoData = {
-                        created_at: new Date().toISOString(),
-                        open: block.open,
-                        close: block.close,
-                        volume: block.volume || 0,
-                        reversal: block.reversal // Manter reversal no fallback básico
-                    };
-
-                    const fallbackResponse = await fetch(`${this.supabaseUrl}/botbinance`, {
-                        method: 'POST',
-                        headers: {
-                            'apikey': this.supabaseKey,
-                            'Authorization': `Bearer ${this.supabaseKey}`,
-                            'Content-Type': 'application/json',
-                            'Prefer': 'return=minimal'
-                        },
-                        body: JSON.stringify(renkoData)
-                    });
-
-                    if (!fallbackResponse.ok) {
-                        const fallbackErrorText = await fallbackResponse.text();
-
-                        // Se ainda falhar e for sobre reversal, tentar sem ele
-                        if (fallbackErrorText.includes('reversal')) {
-                            console.warn('⚠️ Campo reversal não existe, tentando sem ele...');
-
-                            renkoData = {
-                                created_at: new Date().toISOString(),
-                                open: block.open,
-                                close: block.close,
-                                volume: block.volume || 0
-                            };
-
-                            const finalFallbackResponse = await fetch(`${this.supabaseUrl}/botbinance`, {
-                                method: 'POST',
-                                headers: {
-                                    'apikey': this.supabaseKey,
-                                    'Authorization': `Bearer ${this.supabaseKey}`,
-                                    'Content-Type': 'application/json',
-                                    'Prefer': 'return=minimal'
-                                },
-                                body: JSON.stringify(renkoData)
-                            });
-
-                            if (!finalFallbackResponse.ok) {
-                                const finalErrorText = await finalFallbackResponse.text();
-                                throw new Error(`Erro HTTP ${finalFallbackResponse.status}: ${finalErrorText}`);
-                            }
-
-                            console.log('✅ Bloco Renko salvo no banco (apenas campos básicos)');
-                        } else {
-                            throw new Error(`Erro HTTP ${fallbackResponse.status}: ${fallbackErrorText}`);
-                        }
-                    } else {
-                        console.log('✅ Bloco Renko salvo no banco (campos básicos + reversal)');
-                    }
-                } else if (errorText.includes('reversal')) {
-                    // Se erro for especificamente sobre reversal, tentar sem ele mas com order book
-                    console.warn('⚠️ Campo reversal não existe, tentando sem ele...');
-
-                    renkoData = {
-                        created_at: new Date().toISOString(),
-                        open: block.open,
-                        close: block.close,
-                        high: block.high,
-                        low: block.low,
-                        volume: block.volume || 0
-                    };
-
-                    // Incluir order book se disponível
-                    if (this.orderBookStats && this.orderBookStats.lastUpdate) {
-                        renkoData = {
-                            ...renkoData,
-                            best_bid_price: Number(this.orderBookStats.bestBidPrice) || 0,
-                            best_bid_quantity: Number(this.orderBookStats.bestBidQuantity) || 0,
-                            best_ask_price: Number(this.orderBookStats.bestAskPrice) || 0,
-                            best_ask_quantity: Number(this.orderBookStats.bestAskQuantity) || 0,
-                            spread: Number(this.orderBookStats.spread) || 0,
-                            spread_percentage: Number(this.orderBookStats.spreadPercentage) || 0,
-                            bid_liquidity: Number(this.orderBookStats.bidLiquidity) || 0,
-                            ask_liquidity: Number(this.orderBookStats.askLiquidity) || 0,
-                            total_liquidity: Number(this.orderBookStats.totalLiquidity) || 0,
-                            imbalance: Number(this.orderBookStats.imbalance) || 0,
-                            weighted_mid_price: Number(this.orderBookStats.weightedMidPrice) || 0
-                        };
-                    }
-
-                    const reversalFallbackResponse = await fetch(`${this.supabaseUrl}/botbinance`, {
-                        method: 'POST',
-                        headers: {
-                            'apikey': this.supabaseKey,
-                            'Authorization': `Bearer ${this.supabaseKey}`,
-                            'Content-Type': 'application/json',
-                            'Prefer': 'return=minimal'
-                        },
-                        body: JSON.stringify(renkoData)
-                    });
-
-                    if (!reversalFallbackResponse.ok) {
-                        const reversalErrorText = await reversalFallbackResponse.text();
-                        throw new Error(`Erro HTTP ${reversalFallbackResponse.status}: ${reversalErrorText}`);
-                    }
-
-                    console.log('✅ Bloco Renko salvo no banco (sem reversal)');
-                } else {
-                    throw new Error(`Erro HTTP ${response.status}: ${errorText}`);
-                }
-            } else {
-                console.log('✅ Bloco Renko salvo no banco com sucesso (com high/low)');
+                throw new Error(`Erro ao salvar: ${response.status} - ${errorText}`);
             }
+
+            const savedData = await response.json();
+            console.log('✅ Bloco salvo com sucesso:', savedData);
 
             // Atualizar UI para mostrar que foi salvo
             this.updateSaveStatus(true);
 
         } catch (error) {
-            console.error('❌ Erro ao salvar bloco Renko no banco:', error);
+            console.error('❌ Erro ao registrar bloco no banco:', error);
             this.updateSaveStatus(false, error.message);
+            // Continuar funcionamento mesmo se houver erro de salvamento
         }
     }
 
@@ -1218,8 +1126,15 @@ class RenkoChart {
             rsiValueElement.textContent = rsiValue.toFixed(2);
             rsiValueElement.className = 'stat-value rsi-value';
 
-            // Atualizar status do RSI
-            const rsiLevel = this.rsiCalculator.getRSILevel();
+            // Atualizar status do RSI (com verificação de segurança)
+            let rsiLevel = 'NEUTRO';
+            if (this.rsiCalculator && typeof this.rsiCalculator.getRSILevel === 'function') {
+                try {
+                    rsiLevel = this.rsiCalculator.getRSILevel();
+                } catch (error) {
+                    console.warn('❌ Erro ao obter nível RSI:', error);
+                }
+            }
             rsiStatusElement.textContent = rsiLevel;
 
             // Aplicar cores baseadas no nível
@@ -1391,7 +1306,13 @@ class RenkoChart {
         };
 
         // Reset RSI
-        this.rsiCalculator.reset();
+        if (this.rsiCalculator && typeof this.rsiCalculator.reset === 'function') {
+            try {
+                this.rsiCalculator.reset();
+            } catch (error) {
+                console.warn('❌ Erro ao resetar RSI:', error);
+            }
+        }
         this.rsiData = [];
         this.updateRSIDisplay();
 
